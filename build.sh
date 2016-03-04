@@ -6,11 +6,13 @@ BUILD_TIME=$(date +%FT%T%z)
 GIT_SHA=$(git rev-parse --short HEAD)
 LDFLAGS="-X github.com/tidwall/propgeo/core.Version=${VERSION} -X github.com/tidwall/propgeo/core.BuildTime=${BUILD_TIME} -X github.com/tidwall/propgeo/core.GitSHA=${GIT_SHA}"
 
+export GO15VENDOREXPERIMENT=1
+
 cd $(dirname "${BASH_SOURCE[0]}")
 OD="$(pwd)"
 
 # copy all files to an isloated directory.
-TMP="$(mktemp -d -t propgeo)"
+TMP="$(mktemp -d -t propgeo.XXXX)"
 function rmtemp {
   	rm -rf "$TMP"
 }
