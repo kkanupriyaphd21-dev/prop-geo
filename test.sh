@@ -4,9 +4,7 @@ set -e
 cd $(dirname "${BASH_SOURCE[0]}")
 WD=$(pwd)
 
-if [ ! -f "propgeo-server" ];then 
-	./build.sh
-fi
+./build.sh
 
 TMP="$(mktemp -d -t data-test.XXXX)"
 ./propgeo-server -p 9876 -d "$TMP" -q &
