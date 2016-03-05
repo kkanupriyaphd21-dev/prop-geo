@@ -14,6 +14,7 @@ PropGeo is an open source (MIT licensed), in-memory geolocation data store, spat
 - Server responses are in json.
 - Full [command line interface](#cli).
 - Leader / follower [replication](#replication).
+- In-memory database that persists on disk.
 - Simliar feel and syntax style to the fantastic [Redis](http://redis.io) api.
 - Written 100% in [Go](https://golang.org).
 - Very high performance.
@@ -116,7 +117,7 @@ You can choose a value between 1 and 8. The value 1 will result in no more than 
 <td>Sparse 5<img src="https://raw.githubusercontent.com/tidwall/propgeo/master/doc/sparse-5.png" width="100" height="100" border="0" alt="Search Within"></td>
 <td>Sparse 6<img src="https://raw.githubusercontent.com/tidwall/propgeo/master/doc/sparse-6.png" width="100" height="100" border="0" alt="Search Within"></td>
 </table>
-*Please note that higher the sparse value, the slower the performance. Also, LIMIT and CURSOR are not available when using SPARSE.* 
+*Please note that the higher the sparse value, the slower the performance. Also, LIMIT and CURSOR are not available when using SPARSE.* 
 
 **WHERE** - This option allows for filtering out results based on [field](#fields) values. For example<br>```nearby fleet where speed 70 +inf point 33.462 -112.268 6000``` will return only the objects in the 'fleet' collection that are within the 6 km radius **and** have a field named `speed` that is greater than `70`. <br><br>Multiple WHEREs are concatenated as **and** clauses. ```WHERE speed 70 +inf WHERE age -inf 24``` would be interpreted as *speed is over 70 <b>and</b> age is less than 24.*<br><br>The default value for a field is always `0`. Thus if you do a WHERE on the field `speed` and an object does not have that field set, the server will pretend that the object does and that the value is Zero.
 
@@ -132,7 +133,7 @@ You can choose a value between 1 and 8. The value 1 will result in no more than 
 ## Geofencing
 
 <img src="https://raw.githubusercontent.com/tidwall/propgeo/master/doc/geofence.gif" width="200" height="200" border="0" alt="Geofence animation" align="left">
-A [geofence](https://en.wikipedia.org/wiki/Geo-fence) is a virtual boundary that can detect when an object enters or exits the area. This boundary can be a radius, bounding box, or a polygon. PropGeo can turn any standard search into a geofence monitor by adding by the FENCE keyword to the search. 
+A [geofence](https://en.wikipedia.org/wiki/Geo-fence) is a virtual boundary that can detect when an object enters or exits the area. This boundary can be a radius, bounding box, or a polygon. PropGeo can turn any standard search into a geofence monitor by adding the FENCE keyword to the search. 
 <br clear="all">
 
 A simple example:
@@ -151,9 +152,9 @@ And the connection will be kept open. If any object enters or exits the 6 km rad
 
 The server will notify the client if the `command` is `del | set | drop`. 
 
-- `del` is when an object has been deleted from the collection that is being fenced.
-- `drop` is when the entire collection is dropped.
-- `set` is when an object has been added or updated, and when it's position is detected by the fence.
+- `del` notifies the client that an object has been deleted from the collection that is being fenced.
+- `drop` notifies the client that the entire collection is dropped.
+- `set` notifies the client that an object has been added or updated, and when it's position is detected by the fence.
 
 The `detect` may be `enter | exit | cross`.
 

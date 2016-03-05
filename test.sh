@@ -5,11 +5,10 @@ cd $(dirname "${BASH_SOURCE[0]}")
 WD=$(pwd)
 
 if [ ! -f "propgeo-server" ];then 
-	echo missing propgeo-server binary
-	exit 1
+	./build.sh
 fi
 
-TMP="$(mktemp -d -t data-test)"
+TMP="$(mktemp -d -t data-test.XXXX)"
 ./propgeo-server -p 9876 -d "$TMP" -q &
 PID=$!
 function end {
