@@ -10,9 +10,9 @@ import (
 	"sync"
 
 	"github.com/tidwall/propgeo/client"
-	"github.com/tidwall/propgeo/collection"
+	"github.com/tidwall/propgeo/controller/collection"
+	"github.com/tidwall/propgeo/controller/log"
 	"github.com/tidwall/propgeo/geojson"
-	"github.com/tidwall/propgeo/log"
 )
 
 type liveBuffer struct {

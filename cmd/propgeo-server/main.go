@@ -10,9 +10,8 @@ import (
 	"strconv"
 
 	"github.com/tidwall/propgeo/controller"
+	"github.com/tidwall/propgeo/controller/log"
 	"github.com/tidwall/propgeo/core"
-	"github.com/tidwall/propgeo/log"
-	"github.com/tidwall/propgeo/server"
 )
 
 var (
@@ -42,9 +41,8 @@ func main() {
 		HideDebug: !veryVerbose,
 		HideWarn:  !(veryVerbose || verbose),
 	})
-	controller.DevMode = devMode
-	controller.ShowDebugMessages = veryVerbose
-	server.ShowDebugMessages = veryVerbose
+	core.DevMode = devMode
+	core.ShowDebugMessages = veryVerbose
 
 	//  _____ _ _     ___ ___
 	// |_   _|_| |___|_  | . |
