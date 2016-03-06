@@ -6,7 +6,7 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/tidwall/propgeo/collection"
+	"github.com/tidwall/propgeo/controller/collection"
 	"github.com/tidwall/propgeo/geojson"
 )
 

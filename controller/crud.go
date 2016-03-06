@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/btree"
-	"github.com/tidwall/propgeo/collection"
+	"github.com/tidwall/propgeo/controller/collection"
 	"github.com/tidwall/propgeo/geojson"
 	"github.com/tidwall/propgeo/geojson/geohash"
 )

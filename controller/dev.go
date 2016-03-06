@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/tidwall/propgeo/log"
+	"github.com/tidwall/propgeo/controller/log"
 )
 
 func (c *Controller) cmdMassInsert(line string) error {

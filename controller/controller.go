@@ -16,18 +16,12 @@ import (
 	"time"
 
 	"github.com/google/btree"
-	"github.com/tidwall/propgeo/collection"
+	"github.com/tidwall/propgeo/controller/collection"
+	"github.com/tidwall/propgeo/controller/log"
+	"github.com/tidwall/propgeo/controller/server"
 	"github.com/tidwall/propgeo/core"
 	"github.com/tidwall/propgeo/geojson"
-	"github.com/tidwall/propgeo/log"
-	"github.com/tidwall/propgeo/server"
 )
-
-// DevMode puts application in to dev mode
-var DevMode = false
-
-// ShowDebugMessages allows for log.Debug to print to console.
-var ShowDebugMessages = false
 
 type collectionT struct {
 	Key        string
@@ -163,7 +157,7 @@ func isReservedFieldName(field string) bool {
 }
 
 func (c *Controller) handleInputCommand(line string, w io.Writer) error {
-	if ShowDebugMessages && line != "pInG" {
+	if core.ShowDebugMessages && line != "pInG" {
 		log.Debug(line)
 	}
 	start := time.Now()
@@ -319,7 +313,7 @@ func (c *Controller) command(line string, w io.Writer) (resp string, d commandDe
 		d, err = c.cmdFlushDB(nline)
 		resp = okResp()
 	case "massinsert":
-		if !DevMode {
+		if !core.DevMode {
 			err = fmt.Errorf("unknown command '%s'", cmd)
 			return
 		}
