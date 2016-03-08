@@ -4,7 +4,7 @@ clean:
 	rm -f propgeo-server
 	rm -f propgeo-cli
 test:
-	@./test.sh
+	@./build.sh test
 install: all
 	cp propgeo-server /usr/local/bin
 	cp propgeo-cli /usr/local/bin
