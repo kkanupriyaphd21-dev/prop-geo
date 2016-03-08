@@ -2,9 +2,15 @@
 set -e
 
 VERSION="0.0.1"
-BUILD_TIME=$(date +%FT%T%z)
-GIT_SHA=$(git rev-parse --short HEAD)
-LDFLAGS="-X github.com/tidwall/propgeo/core.Version=${VERSION} -X github.com/tidwall/propgeo/core.BuildTime=${BUILD_TIME} -X github.com/tidwall/propgeo/core.GitSHA=${GIT_SHA}"
+PROTECTED_MODE="no"
+
+# Hardcode some values to the core package
+LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.Version=${VERSION}"
+LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.GitSHA=$(git rev-parse --short HEAD)"
+LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.BuildTime=$(date +%FT%T%z)"
+if [ "$PROTECTED_MODE" == "no" ]; then
+	LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.ProtectedMode=no"
+fi
 
 export GO15VENDOREXPERIMENT=1
 
@@ -32,7 +38,7 @@ if [ "$NOCOPY" != "1" ]; then
 	cd $WD
 fi
 
-core/gen.sh
+#core/gen.sh
 
 # build and store objects into original directory.
 go build -ldflags "$LDFLAGS" -o "$OD/propgeo-server" cmd/propgeo-server/*.go
