@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://propgeo.com"><img 
+  <a href="http://propgeo.com"><img 
     src="/doc/logo1500.png" 
     width="200" height="200" border="0" alt="PropGeo"></a>
 </p>
