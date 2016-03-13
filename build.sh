@@ -1,12 +1,14 @@
 #!/bin/bash
 set -e
 
-VERSION="0.0.1"
+VERSION="1.0.3"
 PROTECTED_MODE="no"
 
 # Hardcode some values to the core package
 LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.Version=${VERSION}"
-LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.GitSHA=$(git rev-parse --short HEAD)"
+if [ -d ".git" ]; then
+	LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.GitSHA=$(git rev-parse --short HEAD)"
+fi
 LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.BuildTime=$(date +%FT%T%z)"
 if [ "$PROTECTED_MODE" == "no" ]; then
 	LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.ProtectedMode=no"
