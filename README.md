@@ -4,6 +4,8 @@
     width="200" height="200" border="0" alt="PropGeo"></a>
 </p>
 
+This README is quick start document. You can find detailed documentation at [http://propgeo.com](http://propgeo.com).
+
 PropGeo is an open source (MIT licensed), in-memory geolocation data store, spatial index, and realtime geofence. It supports a variety of object types including lat/lon points, bounding boxes, XYZ tiles, Geohashes, and GeoJSON. 
 
 ## Features
@@ -65,7 +67,7 @@ $ ./propgeo-cli
 > scan fleet                                 # returns both trucks in 'fleet'
 > nearby fleet point 33.462 -112.268 6000    # search 6 kilometers around a point. returns one truck.
 
-# crud operations
+# key value operations
 > get fleet truck1                           # returns 'truck1'
 > del fleet truck2                           # deletes 'truck2'
 > drop fleet                                 # removes all 
@@ -272,7 +274,7 @@ Currently we have only one native client written in Go. Though is should be triv
 ## Commands
 This is the full list of commands available to PropGeo. 
 
-#### Crud
+#### Keys
 ```md
 GET key id [OBJECT|POINT|BOUNDS|(HASH precision)]
 summary: Get the object of an id
