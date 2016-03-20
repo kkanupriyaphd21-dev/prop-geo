@@ -32,6 +32,14 @@ type AOFReader struct {
 	p     int       // pointer
 }
 
+type errAOFHook struct {
+	err error
+}
+
+func (err errAOFHook) Error() string {
+	return fmt.Sprintf("hook: %v", err.err)
+}
+
 func (rd *AOFReader) ReadCommand() ([]byte, error) {
 	if rd.l >= 4 {
 		sz1 := int(binary.LittleEndian.Uint32(rd.buf[rd.p:]))
@@ -123,7 +131,16 @@ func (c *Controller) loadAOF() error {
 			}
 			return err
 		}
-
+		empty := true
+		for i := 0; i < len(buf); i++ {
+			if buf[i] != 0 {
+				empty = false
+				break
+			}
+		}
+		if empty {
+			return nil
+		}
 		if _, _, err := c.command(string(buf), nil); err != nil {
 			return err
 		}
@@ -141,6 +158,17 @@ func writeCommand(w io.Writer, line []byte) (n int, err error) {
 }
 
 func (c *Controller) writeAOF(line string, d *commandDetailsT) error {
+	if d != nil {
+		// process hooks
+		if hm, ok := c.hookcols[d.key]; ok {
+			for _, hook := range hm {
+				if err := c.DoHook(hook, d); err != nil {
+					return errAOFHook{err}
+				}
+			}
+		}
+	}
+
 	n, err := writeCommand(c.f, []byte(line))
 	if err != nil {
 		return err
@@ -152,13 +180,14 @@ func (c *Controller) writeAOF(line string, d *commandDetailsT) error {
 	c.fcond.Broadcast()
 	c.fcond.L.Unlock()
 
-	// write to live connection streams
 	if d != nil {
+		// write to live connection streams
 		c.lcond.L.Lock()
 		c.lstack = append(c.lstack, d)
 		c.lcond.Broadcast()
 		c.lcond.L.Unlock()
 	}
+
 	return nil
 }
 
@@ -350,6 +379,10 @@ func (k *treeKeyBoolT) Less(item btree.Item) bool {
 //    - Has this key been marked 'ignore'?
 //      - Yes, then ignore
 //      - No, Mark key as 'ignore'?
+// 'SETHOOK'
+//    - Direct copy from memory.
+// 'DELHOOK'
+//    - Direct copy from memory.
 // 'FLUSHDB'
 //    - Stop shrinking, nothing left to do
 
@@ -364,6 +397,17 @@ func (c *Controller) aofshrink() {
 	endpos := int64(c.aofsz)
 	start := time.Now()
 	log.Infof("aof shrink started at pos %d", endpos)
+
+	var hooks []string
+	for _, hook := range c.hooks {
+		var orgs []string
+		for _, endpoint := range hook.Endpoints {
+			orgs = append(orgs, endpoint.Original)
+		}
+
+		hooks = append(hooks, "SETHOOK "+hook.Name+" "+strings.Join(orgs, ",")+" "+hook.Command)
+	}
+
 	c.mu.Unlock()
 	var err error
 	defer func() {
@@ -539,7 +583,7 @@ reading:
 			break reading // all done
 		case "drop":
 			if line, key = token(line); key == "" {
-				err = errors.New("drop is missing key")
+				err = errors.New("DROP is missing key")
 				return
 			}
 			if !keyIgnoreM[key] {
@@ -547,14 +591,14 @@ reading:
 			}
 		case "del":
 			if line, key = token(line); key == "" {
-				err = errors.New("del is missing key")
+				err = errors.New("DEL is missing key")
 				return
 			}
 			if keyIgnoreM[key] {
 				continue // ignore
 			}
 			if line, id = token(line); id == "" {
-				err = errors.New("del is missing id")
+				err = errors.New("DEL is missing id")
 				return
 			}
 			if keyBucketM.Get(&treeKeyBoolT{key}) == nil {
@@ -743,4 +787,13 @@ reading:
 		}
 		return true
 	})
+	if err == nil {
+		// add all of the hooks
+		for _, line := range hooks {
+			_, err = writeCommand(nf, []byte(line))
+			if err != nil {
+				return
+			}
+		}
+	}
 }
