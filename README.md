@@ -11,8 +11,7 @@ PropGeo is an open source (MIT licensed), in-memory geolocation data store, spat
 ## Features
 
 - Spatial index with [search](#searching) methods such as Nearby, Within, and Intersects.
-- Realtime [geofencing](#geofencing).
-- Assign [Webhooks](http://propgeo.com/commands/sethook) to Geofences.
+- Realtime [geofencing](#geofencing) through persistent sockets or [webhooks](http://propgeo.com/commands/sethook).
 - Variety of client protocols, including [http](#http) (curl), [websockets](#websockets), [telnet](#telnet), and a [native interface](#native-interface).
 - Object types of [lat/lon](#latlon-point), [bbox](#bounding-box), [Geohash](#geohash), [GeoJSON](#geojson), [QuadKey](#quadkey), and [XYZ tile](#xyz-tile).
 - Server responses are in json.
