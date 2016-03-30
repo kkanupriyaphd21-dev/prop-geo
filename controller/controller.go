@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"runtime"
 	"strings"
 	"sync"
@@ -37,6 +38,7 @@ type commandDetailsT struct {
 	oldObj    geojson.Object
 	oldFields []float64
 	updated   bool
+	revert    func()
 }
 
 func (col *collectionT) Less(item btree.Item) bool {
@@ -49,8 +51,7 @@ type Controller struct {
 	host      string
 	port      int
 	f         *os.File
-	cols      *btree.BTree                      // use both tree and map. provide ordering.
-	colsm     map[string]*collection.Collection // use both tree and map. provide performance.
+	cols      *btree.BTree
 	aofsz     int
 	dir       string
 	config    Config
@@ -74,7 +75,6 @@ func ListenAndServe(host string, port int, dir string) error {
 		port:     port,
 		dir:      dir,
 		cols:     btree.New(16),
-		colsm:    make(map[string]*collection.Collection),
 		follows:  make(map[*bytes.Buffer]bool),
 		fcond:    sync.NewCond(&sync.Mutex{}),
 		lives:    make(map[*liveBuffer]bool),
@@ -88,7 +88,10 @@ func ListenAndServe(host string, port int, dir string) error {
 	if err := c.loadConfig(); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(dir+"/aof", os.O_CREATE|os.O_RDWR, 0600)
+	if err := c.migrateAOF(); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path.Join(dir, "appendonly.aof"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return err
 	}
@@ -136,19 +139,24 @@ func ListenAndServe(host string, port int, dir string) error {
 
 func (c *Controller) setCol(key string, col *collection.Collection) {
 	c.cols.ReplaceOrInsert(&collectionT{Key: key, Collection: col})
-	c.colsm[key] = col
 }
 
 func (c *Controller) getCol(key string) *collection.Collection {
-	col, ok := c.colsm[key]
-	if !ok {
+	item := c.cols.Get(&collectionT{Key: key})
+	if item == nil {
 		return nil
 	}
-	return col
+	return item.(*collectionT).Collection
+}
+
+func (c *Controller) scanGreaterOrEqual(key string, iterator func(key string, col *collection.Collection) bool) {
+	c.cols.AscendGreaterOrEqual(&collectionT{Key: key}, func(item btree.Item) bool {
+		col := item.(*collectionT)
+		return iterator(col.Key, col.Collection)
+	})
 }
 
 func (c *Controller) deleteCol(key string) *collection.Collection {
-	delete(c.colsm, key)
 	i := c.cols.Delete(&collectionT{Key: key})
 	if i == nil {
 		return nil
@@ -353,13 +361,12 @@ func (c *Controller) command(msg *server.Message, w io.Writer) (res string, d co
 		res, d, err = c.cmdDelHook(msg)
 	case "hooks":
 		res, err = c.cmdHooks(msg)
-	// case "massinsert":
-	// 	if !core.DevMode {
-	// 		err = fmt.Errorf("unknown command '%s'", cmd)
-	// 		return
-	// 	}
-	// 	err = c.cmdMassInsert(nline)
-	// 	resp = okResp()
+	case "massinsert":
+		if !core.DevMode {
+			err = fmt.Errorf("unknown command '%s'", msg.Values[0])
+			return
+		}
+		res, err = c.cmdMassInsert(msg)
 	// case "follow":
 	// 	err = c.cmdFollow(nline)
 	// 	resp = okResp()
@@ -388,13 +395,11 @@ func (c *Controller) command(msg *server.Message, w io.Writer) (res string, d co
 	// case "aofmd5":
 	// 	resp, err = c.cmdAOFMD5(nline)
 	case "gc":
-		start := time.Now()
 		go runtime.GC()
-		res = server.OKMessage(msg, start)
-	// case "aofshrink":
-	// 	go c.aofshrink()
-	// 	resp = okResp()
-
+		res = server.OKMessage(msg, time.Now())
+	case "aofshrink":
+		go c.aofshrink()
+		res = server.OKMessage(msg, time.Now())
 	case "config get":
 		res, err = c.cmdConfigGet(msg)
 	case "config set":
