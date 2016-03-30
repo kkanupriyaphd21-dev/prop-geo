@@ -169,20 +169,46 @@ func (c *Controller) handleInputCommand(conn *server.Conn, msg *server.Message, 
 	for _, v := range msg.Values {
 		words = append(words, v.String())
 	}
-	// line := strings.Join(words, " ")
-
-	// if core.ShowDebugMessages && line != "pInG" {
-	// 	log.Debug(line)
-	// }
 	start := time.Now()
-
+	writeOutput := func(res string) error {
+		switch msg.ConnType {
+		default:
+			err := fmt.Errorf("unsupported conn type: %v", msg.ConnType)
+			log.Error(err)
+			return err
+		case server.WebSocket:
+			return server.WriteWebSocketMessage(w, []byte(res))
+		case server.HTTP:
+			_, err := fmt.Fprintf(w, "HTTP/1.1 200 OK\r\n"+
+				"Connection: close\r\n"+
+				"Content-Length: %d\r\n"+
+				"Content-Type: application/json charset=utf-8\r\n"+
+				"\r\n", len(res)+2)
+			if err != nil {
+				return err
+			}
+			_, err = io.WriteString(w, res+"\r\n")
+			return err
+		case server.RESP:
+			var err error
+			if msg.OutputType == server.JSON {
+				_, err = fmt.Fprintf(w, "$%d\r\n%s\r\n", len(res), res)
+			} else {
+				_, err = io.WriteString(w, res)
+			}
+			return err
+		case server.Native:
+			_, err := fmt.Fprintf(w, "$%d %s\r\n", len(res), res)
+			return err
+		}
+	}
 	// Ping. Just send back the response. No need to put through the pipeline.
 	if msg.Command == "ping" {
 		switch msg.OutputType {
 		case server.JSON:
-			w.Write([]byte(`{"ok":true,"ping":"pong","elapsed":"` + time.Now().Sub(start).String() + `"}`))
+			return writeOutput(`{"ok":true,"ping":"pong","elapsed":"` + time.Now().Sub(start).String() + `"}`)
 		case server.RESP:
-			io.WriteString(w, "+PONG\r\n")
+			return writeOutput("+PONG\r\n")
 		}
 		return nil
 	}
@@ -190,13 +216,13 @@ func (c *Controller) handleInputCommand(conn *server.Conn, msg *server.Message, 
 	writeErr := func(err error) error {
 		switch msg.OutputType {
 		case server.JSON:
-			io.WriteString(w, `{"ok":false,"err":`+jsonString(err.Error())+`,"elapsed":"`+time.Now().Sub(start).String()+"\"}")
+			return writeOutput(`{"ok":false,"err":` + jsonString(err.Error()) + `,"elapsed":"` + time.Now().Sub(start).String() + "\"}")
 		case server.RESP:
 			if err == errInvalidNumberOfArguments {
-				io.WriteString(w, "-ERR wrong number of arguments for '"+msg.Command+"' command\r\n")
+				return writeOutput("-ERR wrong number of arguments for '" + msg.Command + "' command\r\n")
 			} else {
 				v, _ := resp.ErrorValue(errors.New("ERR " + err.Error())).MarshalRESP()
-				io.WriteString(w, string(v))
+				return writeOutput(string(v))
 			}
 		}
 		return nil
@@ -257,6 +283,8 @@ func (c *Controller) handleInputCommand(conn *server.Conn, msg *server.Message, 
 		// does not write to aof, but requires a write lock.
 		c.mu.Lock()
 		defer c.mu.Unlock()
+	case "output":
+		// this is local connection operation. Locks not needed.
 	case "massinsert":
 		// dev operation
 		// ** danger zone **
@@ -280,7 +308,7 @@ func (c *Controller) handleInputCommand(conn *server.Conn, msg *server.Message, 
 		}
 	}
 	if res != "" {
-		if _, err := io.WriteString(w, res); err != nil {
+		if err := writeOutput(res); err != nil {
 			return err
 		}
 	}
@@ -305,22 +333,9 @@ func (c *Controller) reset() {
 }
 
 func (c *Controller) command(msg *server.Message, w io.Writer) (res string, d commandDetailsT, err error) {
-	start := time.Now()
-	okResp := func() string {
-		if w != nil {
-			switch msg.OutputType {
-			case server.JSON:
-				return `{"ok":true,"elapsed":"` + time.Now().Sub(start).String() + "\"}"
-			case server.RESP:
-				return "+OK\r\n"
-			}
-		}
-		return ""
-	}
 	switch msg.Command {
 	default:
 		err = fmt.Errorf("unknown command '%s'", msg.Values[0])
-		return
 	// lock
 	case "set":
 		res, d, err = c.cmdSet(msg)
@@ -332,14 +347,12 @@ func (c *Controller) command(msg *server.Message, w io.Writer) (res string, d co
 		res, d, err = c.cmdDrop(msg)
 	case "flushdb":
 		res, d, err = c.cmdFlushDB(msg)
-	// case "sethook":
-	// 	err = c.cmdSetHook(nline)
-	// 	resp = okResp()
-	// case "delhook":
-	// 	err = c.cmdDelHook(nline)
-	// 	resp = okResp()
-	// case "hooks":
-	// 	err = c.cmdHooks(nline, w)
+	case "sethook":
+		res, d, err = c.cmdSetHook(msg)
+	case "delhook":
+		res, d, err = c.cmdDelHook(msg)
+	case "hooks":
+		res, err = c.cmdHooks(msg)
 	// case "massinsert":
 	// 	if !core.DevMode {
 	// 		err = fmt.Errorf("unknown command '%s'", cmd)
@@ -350,11 +363,8 @@ func (c *Controller) command(msg *server.Message, w io.Writer) (res string, d co
 	// case "follow":
 	// 	err = c.cmdFollow(nline)
 	// 	resp = okResp()
-	// case "config":
-	// 	resp, err = c.cmdConfig(nline)
-	// case "readonly":
-	// 	err = c.cmdReadOnly(nline)
-	// 	resp = okResp()
+	case "readonly":
+		res, err = c.cmdReadOnly(msg)
 	case "stats":
 		res, err = c.cmdStats(msg)
 	case "server":
@@ -371,17 +381,35 @@ func (c *Controller) command(msg *server.Message, w io.Writer) (res string, d co
 		res, err = c.cmdGet(msg)
 	case "keys":
 		res, err = c.cmdKeys(msg)
+	case "output":
+		res, err = c.cmdOutput(msg)
 	// case "aof":
 	// 	err = c.cmdAOF(nline, w)
 	// case "aofmd5":
 	// 	resp, err = c.cmdAOFMD5(nline)
 	case "gc":
+		start := time.Now()
 		go runtime.GC()
-		res = okResp()
-		// 	resp = okResp()
-		// case "aofshrink":
-		// 	go c.aofshrink()
-		// 	resp = okResp()
+		res = server.OKMessage(msg, start)
+	// case "aofshrink":
+	// 	go c.aofshrink()
+	// 	resp = okResp()
+
+	case "config get":
+		res, err = c.cmdConfigGet(msg)
+	case "config set":
+		res, err = c.cmdConfigSet(msg)
+	case "config rewrite":
+		res, err = c.cmdConfigRewrite(msg)
+	case "config":
+		err = fmt.Errorf("unknown command '%s'", msg.Values[0])
+		if len(msg.Values) > 1 {
+			command := msg.Values[0].String() + " " + msg.Values[1].String()
+			msg.Values[1] = resp.StringValue(command)
+			msg.Values = msg.Values[1:]
+			msg.Command = strings.ToLower(command)
+			return c.command(msg, w)
+		}
 	}
 	return
 }

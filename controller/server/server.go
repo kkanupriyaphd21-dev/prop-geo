@@ -2,11 +2,13 @@ package server
 
 import (
 	"bufio"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"strings"
+	"time"
 
 	//"github.com/tidwall/propgeo/client"
 
@@ -96,6 +98,7 @@ func handleConn(
 		}
 	}
 	defer conn.Close()
+	outputType := Null
 	rd := NewAnyReaderWriter(conn)
 	brd := rd.rd
 	for {
@@ -112,6 +115,9 @@ func handleConn(
 			return
 		}
 		if msg != nil && msg.Command != "" {
+			if outputType != Null {
+				msg.OutputType = outputType
+			}
 			if msg.Command == "quit" {
 				if msg.OutputType == RESP {
 					io.WriteString(conn, "+OK\r\n")
@@ -123,8 +129,49 @@ func handleConn(
 				log.Error(err)
 				return
 			}
+			outputType = msg.OutputType
+		} else {
+			conn.Write([]byte("HTTP/1.1 500 Bad Request\r\nConnection: close\r\n\r\n"))
+			return
 		}
+		if msg.ConnType == HTTP || msg.ConnType == WebSocket {
+			return
+		}
+
 	}
+}
+
+func WriteWebSocketMessage(w io.Writer, data []byte) error {
+	var msg []byte
+	buf := make([]byte, 10+len(data))
+	buf[0] = 129 // FIN + TEXT
+	if len(data) <= 125 {
+		buf[1] = byte(len(data))
+		copy(buf[2:], data)
+		msg = buf[:2+len(data)]
+	} else if len(data) <= 0xFFFF {
+		buf[1] = 126
+		binary.BigEndian.PutUint16(buf[2:], uint16(len(data)))
+		copy(buf[4:], data)
+		msg = buf[:4+len(data)]
+	} else {
+		buf[1] = 127
+		binary.BigEndian.PutUint64(buf[2:], uint64(len(data)))
+		copy(buf[10:], data)
+		msg = buf[:10+len(data)]
+	}
+	_, err := w.Write(msg)
+	return err
+}
+
+func OKMessage(msg *Message, start time.Time) string {
+	switch msg.OutputType {
+	case JSON:
+		return `{"ok":true,"elapsed":"` + time.Now().Sub(start).String() + "\"}"
+	case RESP:
+		return "+OK\r\n"
+	}
+	return ""
 }
 
 //err := func() error {
