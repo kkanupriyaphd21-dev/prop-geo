@@ -16,6 +16,8 @@ import (
 	"github.com/tidwall/propgeo/controller/server"
 )
 
+const AsyncHooks = true
+
 type errAOFHook struct {
 	err error
 }
@@ -90,16 +92,9 @@ func (c *Controller) writeAOF(value resp.Value, d *commandDetailsT) error {
 		if !d.updated {
 			return nil // just ignore writes if the command did not update
 		}
-		// process hooks
-		if hm, ok := c.hookcols[d.key]; ok {
-			for _, hook := range hm {
-				if err := c.DoHook(hook, d); err != nil {
-					if d.revert != nil {
-						d.revert()
-					}
-					return errAOFHook{err}
-				}
-			}
+		if c.config.FollowHost == "" {
+			// process hooks, for leader only
+			return c.processHooks(d)
 		}
 	}
 	data, err := value.MarshalRESP()
@@ -124,7 +119,24 @@ func (c *Controller) writeAOF(value resp.Value, d *commandDetailsT) error {
 		c.lcond.Broadcast()
 		c.lcond.L.Unlock()
 	}
+	return nil
+}
 
+func (c *Controller) processHooks(d *commandDetailsT) error {
+	if hm, ok := c.hookcols[d.key]; ok {
+		for _, hook := range hm {
+			if AsyncHooks {
+				go hook.Do(d)
+			} else {
+				if err := hook.Do(d); err != nil {
+					if d.revert != nil {
+						d.revert()
+					}
+					return errAOFHook{err}
+				}
+			}
+		}
+	}
 	return nil
 }
 
@@ -207,7 +219,16 @@ func (c *Controller) cmdAOF(msg *server.Message) (res string, err error) {
 }
 
 func (c *Controller) liveAOF(pos int64, conn net.Conn, rd *server.AnyReaderWriter, msg *server.Message) error {
-	defer conn.Close()
+	c.mu.Lock()
+	c.aofconnM[conn] = true
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		delete(c.aofconnM, conn)
+		c.mu.Unlock()
+		conn.Close()
+	}()
+
 	if _, err := conn.Write([]byte("+OK\r\n")); err != nil {
 		return err
 	}
@@ -260,18 +281,16 @@ func (c *Controller) liveAOF(pos int64, conn net.Conn, rd *server.AnyReaderWrite
 			if err != nil {
 				return err
 			}
-			rd := resp.NewReader(f)
+
+			b := make([]byte, 4096)
+			// The reader needs to be OK with the eof not
 			for {
-				v, _, err := rd.ReadValue()
-				if err != io.EOF {
+				n, err := f.Read(b)
+				if err != io.EOF && n > 0 {
 					if err != nil {
 						return err
 					}
-					data, err := v.MarshalRESP()
-					if err != nil {
-						return err
-					}
-					if _, err := conn.Write(data); err != nil {
+					if _, err := conn.Write(b[:n]); err != nil {
 						return err
 					}
 					continue

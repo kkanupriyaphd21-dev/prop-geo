@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garyburd/redigo/redis"
 	"github.com/tidwall/resp"
 	"github.com/tidwall/propgeo/controller/log"
 	"github.com/tidwall/propgeo/controller/server"
@@ -46,26 +45,31 @@ type Hook struct {
 	ScanWriter *scanWriter
 }
 
-func (c *Controller) DoHook(hook *Hook, details *commandDetailsT) error {
+func (hook *Hook) Do(details *commandDetailsT) error {
 	var lerrs []error
-	msgs := c.FenceMatch(hook.Name, hook.ScanWriter, hook.Fence, details, false)
+	msgs := FenceMatch(hook.Name, hook.ScanWriter, hook.Fence, details)
+nextMessage:
 	for _, msg := range msgs {
+	nextEndpoint:
 		for _, endpoint := range hook.Endpoints {
 			switch endpoint.Protocol {
 			case HTTP:
-				if err := c.sendHTTPMessage(endpoint, msg); err != nil {
+				if err := sendHTTPMessage(endpoint, []byte(msg)); err != nil {
 					lerrs = append(lerrs, err)
-					continue
+					continue nextEndpoint
 				}
-				return nil //sent
+				continue nextMessage // sent
 			case Disque:
-				if err := c.sendDisqueMessage(endpoint, msg); err != nil {
+				if err := sendDisqueMessage(endpoint, []byte(msg)); err != nil {
 					lerrs = append(lerrs, err)
-					continue
+					continue nextEndpoint
 				}
-				return nil // sent
+				continue nextMessage // sent
 			}
 		}
+	}
+	if len(lerrs) == 0 {
+		return nil
 	}
 	var errmsgs []string
 	for _, err := range lerrs {
@@ -186,10 +190,12 @@ func (c *Controller) cmdSetHook(msg *server.Message) (res string, d commandDetai
 		}
 		endpoints = append(endpoints, endpoint)
 	}
+
 	commandvs := vs
 	if vs, cmd, ok = tokenval(vs); !ok || cmd == "" {
 		return "", d, errInvalidNumberOfArguments
 	}
+
 	cmdlc := strings.ToLower(cmd)
 	var types []string
 	switch cmdlc {
@@ -227,7 +233,6 @@ func (c *Controller) cmdSetHook(msg *server.Message) (res string, d commandDetai
 		return "", d, err
 	}
 
-	// delete the previous hook
 	if h, ok := c.hooks[name]; ok {
 		// lets see if the previous hook matches the new hook
 		if h.Key == hook.Key && h.Name == hook.Name {
@@ -249,12 +254,15 @@ func (c *Controller) cmdSetHook(msg *server.Message) (res string, d commandDetai
 				}
 			}
 		}
+
+		// delete the previous hook
 		if hm, ok := c.hookcols[h.Key]; ok {
 			delete(hm, h.Name)
 		}
 		delete(c.hooks, h.Name)
 	}
 	d.updated = true
+	d.timestamp = time.Now()
 	c.hooks[name] = hook
 	hm, ok := c.hookcols[hook.Key]
 	if !ok {
@@ -290,6 +298,7 @@ func (c *Controller) cmdDelHook(msg *server.Message) (res string, d commandDetai
 		delete(c.hooks, h.Name)
 		d.updated = true
 	}
+	d.timestamp = time.Now()
 
 	switch msg.OutputType {
 	case server.JSON:
@@ -379,7 +388,7 @@ func (c *Controller) cmdHooks(msg *server.Message) (res string, err error) {
 	return "", nil
 }
 
-func (c *Controller) sendHTTPMessage(endpoint Endpoint, msg []byte) error {
+func sendHTTPMessage(endpoint Endpoint, msg []byte) error {
 	resp, err := http.Post(endpoint.Original, "application/json", bytes.NewBuffer(msg))
 	if err != nil {
 		return err
@@ -391,9 +400,9 @@ func (c *Controller) sendHTTPMessage(endpoint Endpoint, msg []byte) error {
 	return nil
 }
 
-func (c *Controller) sendDisqueMessage(endpoint Endpoint, msg []byte) error {
+func sendDisqueMessage(endpoint Endpoint, msg []byte) error {
 	addr := fmt.Sprintf("%s:%d", endpoint.Disque.Host, endpoint.Disque.Port)
-	conn, err := redis.DialTimeout("tcp", addr, time.Second/4, time.Second/4, time.Second/4)
+	conn, err := DialTimeout(addr, time.Second/4)
 	if err != nil {
 		return err
 	}
@@ -404,10 +413,14 @@ func (c *Controller) sendDisqueMessage(endpoint Endpoint, msg []byte) error {
 		options = append(options, "REPLICATE")
 		options = append(options, endpoint.Disque.Options.Replicate)
 	}
-	id, err := redis.String(conn.Do("ADDJOB", options...))
+	v, err := conn.Do("ADDJOB", options...)
 	if err != nil {
 		return err
 	}
+	if v.Error() != nil {
+		return v.Error()
+	}
+	id := v.String()
 	p := strings.Split(id, "-")
 	if len(p) != 4 {
 		return errors.New("invalid disque reply")

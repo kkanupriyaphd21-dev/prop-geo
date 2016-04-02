@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path"
 	"runtime"
@@ -34,10 +35,12 @@ type commandDetailsT struct {
 	value     float64
 	obj       geojson.Object
 	fields    []float64
+	fmap      map[string]int
 	oldObj    geojson.Object
 	oldFields []float64
 	updated   bool
 	revert    func()
+	timestamp time.Time
 }
 
 func (col *collectionT) Less(item btree.Item) bool {
@@ -64,6 +67,7 @@ type Controller struct {
 	shrinking bool                        // aof shrinking flag
 	hooks     map[string]*Hook            // hook name
 	hookcols  map[string]map[string]*Hook // col key
+	aofconnM  map[net.Conn]bool
 }
 
 // ListenAndServe starts a new propgeo server
@@ -80,6 +84,7 @@ func ListenAndServe(host string, port int, dir string) error {
 		lcond:    sync.NewCond(&sync.Mutex{}),
 		hooks:    make(map[string]*Hook),
 		hookcols: make(map[string]map[string]*Hook),
+		aofconnM: make(map[net.Conn]bool),
 	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
@@ -242,21 +247,24 @@ func (c *Controller) handleInputCommand(conn *server.Conn, msg *server.Message, 
 		requirePass := c.config.RequirePass
 		c.mu.RUnlock()
 		if requirePass != "" {
-			// This better be an AUTH command.
-			if msg.Command != "auth" {
+			password := ""
+			// This better be an AUTH command or the Message should contain an Auth
+			if msg.Command != "auth" && msg.Auth == "" {
 				// Just shut down the pipeline now. The less the client connection knows the better.
 				return writeErr(errors.New("authentication required"))
 			}
-			password := ""
-			if len(msg.Values) > 1 {
-				password = msg.Values[1].String()
+			if msg.Auth != "" {
+				password = msg.Auth
+			} else {
+				if len(msg.Values) > 1 {
+					password = msg.Values[1].String()
+				}
 			}
 			if requirePass != strings.TrimSpace(password) {
 				return writeErr(errors.New("invalid password"))
 			}
 			conn.Authenticated = true
-			w.Write([]byte(`{"ok":true,"elapsed":"` + time.Now().Sub(start).String() + "\"}"))
-			return nil
+			return writeOutput(server.OKMessage(msg, start))
 		} else if msg.Command == "auth" {
 			return writeErr(errors.New("invalid password"))
 		}
