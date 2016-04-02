@@ -13,8 +13,8 @@ PropGeo is an open source (MIT licensed), in-memory geolocation data store, spat
 - Spatial index with [search](#searching) methods such as Nearby, Within, and Intersects.
 - Realtime [geofencing](#geofencing) through persistent sockets or [webhooks](http://propgeo.com/commands/sethook).
 - Object types of [lat/lon](#latlon-point), [bbox](#bounding-box), [Geohash](#geohash), [GeoJSON](#geojson), [QuadKey](#quadkey), and [XYZ tile](#xyz-tile).
-- Excellent support for lots of [Clients Libraries](#client-libraries) written in many different langauges.
-- Variety of protocols, including [http](#http) (curl), [websockets](#websockets), [telnet](#telnet), and the Redis [RESP protocol)](http://redis.io/topics/protocol).
+- Support for lots of [Clients Libraries](#client-libraries) written in many different langauges.
+- Variety of protocols, including [http](#http) (curl), [websockets](#websockets), [telnet](#telnet), and the [Redis RESP](http://redis.io/topics/protocol).
 - Server responses are [RESP](http://redis.io/topics/protocol) or [JSON](http://www.json.org).
 - Full [command line interface](#cli).
 - Leader / follower [replication](#replication).
@@ -123,7 +123,6 @@ You can choose a value between 1 and 8. The value 1 will result in no more than 
 <td>Sparse 3<img src="/doc/sparse-3.png" width="100" height="100" border="0" alt="Search Within"></td>
 <td>Sparse 4<img src="/doc/sparse-4.png" width="100" height="100" border="0" alt="Search Within"></td>
 <td>Sparse 5<img src="/doc/sparse-5.png" width="100" height="100" border="0" alt="Search Within"></td>
-<td>Sparse 6<img src="/doc/sparse-6.png" width="100" height="100" border="0" alt="Search Within"></td>
 </table>
 *Please note that the higher the sparse value, the slower the performance. Also, LIMIT and CURSOR are not available when using SPARSE.* 
 
@@ -251,7 +250,7 @@ The server will respond in [JSON](http://json.org) or [RESP](http://redis.io/top
 - HTTP and Websockets use JSON. 
 - Telnet and RESP clients use RESP.
 
-## Clients
+## Client Libraries
 
 PropGeo uses the [Redis RESP](http://redis.io/topics/protocol) protocol natively. Therefore all clients that support basic Redis commands will in turn support PropGeo. Below are a few of the popular clients. For a more complete list, please see the [Redis Clients](http://redis.io/clients) page.
 
