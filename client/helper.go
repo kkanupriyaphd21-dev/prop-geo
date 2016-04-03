@@ -12,7 +12,7 @@ type Standard struct {
 	Elapsed string `json:"elapsed"`
 }
 
-// Server represents propgeo server statistics.
+// ServerStats represents propgeo server statistics.
 type ServerStats struct {
 	Standard
 	Stats struct {
@@ -29,7 +29,7 @@ type ServerStats struct {
 	} `json:"stats"`
 }
 
-// Stats returns propgeo server statistics.
+// Server returns propgeo server statistics.
 func (conn *Conn) Server() (ServerStats, error) {
 	var stats ServerStats
 	msg, err := conn.Do("server")
