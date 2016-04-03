@@ -13,3 +13,5 @@ install: all
 uninstall: 
 	rm -f /usr/local/bin/propgeo-server
 	rm -f /usr/local/bin/propgeo-cli
+package:
+	@./build.sh package
