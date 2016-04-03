@@ -2,3 +2,4 @@
 propgeo-*
 !cmd/propgeo-*
 data*/
+coverage.out 
