@@ -20,6 +20,15 @@ type liveFenceSwitches struct {
 	minLat, minLon   float64
 	maxLat, maxLon   float64
 	cmd              string
+	roam             roamSwitches
+}
+
+type roamSwitches struct {
+	on      bool
+	key     string
+	id      string
+	pattern bool
+	meters  float64
 }
 
 func (s liveFenceSwitches) Error() string {
@@ -46,18 +55,23 @@ func (c *Controller) cmdSearchArgs(cmd string, vs []resp.Value, types []string) 
 			}
 		}
 	}
+	ltyp := strings.ToLower(typ)
 	var found bool
 	for _, t := range types {
-		if strings.ToLower(typ) == t {
+		if ltyp == t {
 			found = true
 			break
 		}
+	}
+	if !found && s.searchScanBaseTokens.fence && ltyp == "roam" && cmd == "nearby" {
+		// allow roaming for nearby fence searches.
+		found = true
 	}
 	if !found {
 		err = errInvalidArgument(typ)
 		return
 	}
-	switch strings.ToLower(typ) {
+	switch ltyp {
 	case "point":
 		var slat, slon, smeters string
 		if vs, slat, ok = tokenval(vs); !ok || slat == "" {
@@ -206,6 +220,26 @@ func (c *Controller) cmdSearchArgs(cmd string, vs []resp.Value, types []string) 
 		} else {
 			s.o = o
 		}
+	case "roam":
+		s.roam.on = true
+		if vs, s.roam.key, ok = tokenval(vs); !ok || s.roam.key == "" {
+			err = errInvalidNumberOfArguments
+			return
+		}
+		if vs, s.roam.id, ok = tokenval(vs); !ok || s.roam.id == "" {
+			err = errInvalidNumberOfArguments
+			return
+		}
+		s.roam.pattern = globIsGlob(s.roam.id)
+		var smeters string
+		if vs, smeters, ok = tokenval(vs); !ok || smeters == "" {
+			err = errInvalidNumberOfArguments
+			return
+		}
+		if s.roam.meters, err = strconv.ParseFloat(smeters, 64); err != nil {
+			err = errInvalidArgument(smeters)
+			return
+		}
 	}
 	if len(vs) != 0 {
 		err = errInvalidNumberOfArguments
@@ -215,7 +249,7 @@ func (c *Controller) cmdSearchArgs(cmd string, vs []resp.Value, types []string) 
 }
 
 var nearbyTypes = []string{"point"}
-var withinOrIntersectsTypes = []string{"geo", "bounds", "hash", "tile", "quadkey", "get"}
+var withinOrIntersectsTypes = []string{"geo", "bounds", "hash", "tile", "quadkey", "get", "object"}
 
 func (c *Controller) cmdNearby(msg *server.Message) (res string, err error) {
 	start := time.Now()
@@ -273,6 +307,9 @@ func (c *Controller) cmdWithinOrIntersects(cmd string, msg *server.Message) (res
 	sw, err := c.newScanWriter(wr, msg, s.key, s.output, s.precision, s.glob, s.limit, s.wheres, s.nofields)
 	if err != nil {
 		return "", err
+	}
+	if sw.col == nil {
+		return "", errKeyNotFound
 	}
 	wr.WriteString(`{"ok":true`)
 	sw.writeHead()
