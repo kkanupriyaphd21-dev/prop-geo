@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-VERSION="1.1.4"
+VERSION="1.2.0"
 PROTECTED_MODE="no"
 
 # Hardcode some values to the core package
@@ -93,6 +93,7 @@ if [ "$1" == "package" ]; then
 	package "Windows" "windows" "amd64"
 	package "Mac" "darwin" "amd64"
 	package "Linux" "linux" "amd64"
+	package "FreeBSD" "freebsd" "amd64"
 	exit
 fi
 
