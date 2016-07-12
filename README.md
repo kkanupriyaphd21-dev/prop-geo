@@ -10,9 +10,9 @@ PropGeo is an open source (MIT licensed), in-memory geolocation data store, spat
 
 <p align="center">
 <i>This README is quick start document. You can find detailed documentation at <a href="http://propgeo.com">http://propgeo.com</a>.</i><br><br>
-<a href="http://propgeo.com/commands/nearby"><img src="/doc/search-nearby.png" alt="Nearby" border="0" width="120" height="120"></a>
-<a href="http://propgeo.com/commands/within"><img src="/doc/search-within.png" alt="Within" border="0" width="120" height="120"></a>
-<a href="http://propgeo.com/commands/intersects"><img src="/doc/search-intersects.png" alt="Intersects" border="0" width="120" height="120"></a>
+<a href="#searching"><img src="/doc/search-nearby.png" alt="Nearby" border="0" width="120" height="120"></a>
+<a href="#searching"><img src="/doc/search-within.png" alt="Within" border="0" width="120" height="120"></a>
+<a href="#searching"><img src="/doc/search-intersects.png" alt="Intersects" border="0" width="120" height="120"></a>
 <a href="http://propgeo.com/commands/geofencing"><img src="/doc/geofence.gif" alt="Geofencing" border="0" width="120" height="120"></a>
 <a href="http://propgeo.com/topics/roaming-geofences"><img src="/doc/roaming.gif" alt="Roaming Geofences" border="0" width="120" height="120"></a>
 </p>
