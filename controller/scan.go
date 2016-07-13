@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/tidwall/resp"
-	"github.com/tidwall/propgeo/controller/collection"
 	"github.com/tidwall/propgeo/controller/glob"
 	"github.com/tidwall/propgeo/controller/server"
 	"github.com/tidwall/propgeo/geojson"
@@ -31,7 +30,7 @@ func (c *Controller) cmdScan(msg *server.Message) (res string, err error) {
 	if err != nil {
 		return "", err
 	}
-	sw, err := c.newScanWriter(wr, msg, s.key, s.output, s.precision, s.glob, s.limit, s.wheres, s.nofields)
+	sw, err := c.newScanWriter(wr, msg, s.key, s.output, s.precision, s.glob, false, s.limit, s.wheres, s.nofields)
 	if err != nil {
 		return "", err
 	}
@@ -40,24 +39,23 @@ func (c *Controller) cmdScan(msg *server.Message) (res string, err error) {
 	}
 	sw.writeHead()
 	if sw.col != nil {
-		stype := collection.TypeAll
 		if sw.output == outputCount && len(sw.wheres) == 0 && sw.globEverything == true {
-			count := sw.col.Count(stype) - int(s.cursor)
+			count := sw.col.Count() - int(s.cursor)
 			if count < 0 {
 				count = 0
 			}
 			sw.count = uint64(count)
 		} else {
-			g := glob.Parse(sw.glob, s.desc)
+			g := glob.Parse(sw.globPattern, s.desc)
 			if g.Limits[0] == "" && g.Limits[1] == "" {
-				s.cursor = sw.col.Scan(s.cursor, stype, s.desc,
+				s.cursor = sw.col.Scan(s.cursor, s.desc,
 					func(id string, o geojson.Object, fields []float64) bool {
 						return sw.writeObject(id, o, fields, false)
 					},
 				)
 			} else {
 				s.cursor = sw.col.ScanRange(
-					s.cursor, stype, g.Limits[0], g.Limits[1], s.desc,
+					s.cursor, g.Limits[0], g.Limits[1], s.desc,
 					func(id string, o geojson.Object, fields []float64) bool {
 						return sw.writeObject(id, o, fields, false)
 					},
