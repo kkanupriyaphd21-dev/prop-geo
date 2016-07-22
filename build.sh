@@ -75,8 +75,13 @@ package(){
 	bdir=propgeo-${VERSION}-$2-$3
 	rm -rf packages/$bdir && mkdir -p packages/$bdir
 	GOOS=$2 GOARCH=$3 ./build.sh
-	mv propgeo-server packages/$bdir
-	mv propgeo-cli packages/$bdir
+	if [ "$2" == "windows" ]; then
+		mv propgeo-server packages/$bdir/propgeo-server.exe
+		mv propgeo-cli packages/$bdir/propgeo-cli.exe
+	else
+		mv propgeo-server packages/$bdir
+		mv propgeo-cli packages/$bdir
+	fi
 	cp README.md packages/$bdir
 	cd packages
 	if [ "$2" == "linux" ]; then
