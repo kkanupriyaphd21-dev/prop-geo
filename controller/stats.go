@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/tidwall/btree"
@@ -128,10 +127,11 @@ func (c *Controller) cmdServer(msg *server.Message) (res string, err error) {
 		}
 		res = string(data)
 	}
-
 	return res, nil
 }
+
 func (c *Controller) writeInfoServer(w *bytes.Buffer) {
+	fmt.Fprintf(w, "propgeo_version:%s\r\n", core.Version)
 	fmt.Fprintf(w, "redis_version:%s\r\n", core.Version)                              //Version of the Redis server
 	fmt.Fprintf(w, "uptime_in_seconds:%d\r\n", time.Now().Sub(c.started)/time.Second) //Number of seconds since Redis server start
 }
@@ -167,22 +167,6 @@ func (c *Controller) writeInfoStats(w *bytes.Buffer) {
 }
 func (c *Controller) writeInfoReplication(w *bytes.Buffer) {
 	fmt.Fprintf(w, "connected_slaves:%d\r\n", len(c.aofconnM)) // Number of connected slaves
-}
-func (c *Controller) writeInfoCPU(w *bytes.Buffer) {
-	var selfRu syscall.Rusage
-	var cRu syscall.Rusage
-	syscall.Getrusage(syscall.RUSAGE_SELF, &selfRu)
-	syscall.Getrusage(syscall.RUSAGE_CHILDREN, &cRu)
-	fmt.Fprintf(w,
-		"used_cpu_sys:%.2f\r\n"+
-			"used_cpu_user:%.2f\r\n"+
-			"used_cpu_sys_children:%.2f\r\n"+
-			"used_cpu_user_children:%.2f\r\n",
-		float64(selfRu.Stime.Sec)+float64(selfRu.Stime.Usec/1000000),
-		float64(selfRu.Utime.Sec)+float64(selfRu.Utime.Usec/1000000),
-		float64(cRu.Stime.Sec)+float64(cRu.Stime.Usec/1000000),
-		float64(cRu.Utime.Sec)+float64(cRu.Utime.Usec/1000000),
-	)
 }
 func (c *Controller) writeInfoCluster(w *bytes.Buffer) {
 	fmt.Fprintf(w, "cluster_enabled:0\r\n")
@@ -247,7 +231,7 @@ func (c *Controller) cmdInfo(msg *server.Message) (res string, err error) {
 		if err != nil {
 			return "", err
 		}
-		res = `{"ok":true,"stats":` + string(data) + `,"elapsed":"` + time.Now().Sub(start).String() + "\"}"
+		res = `{"ok":true,"info":` + string(data) + `,"elapsed":"` + time.Now().Sub(start).String() + "\"}"
 	case server.RESP:
 		data, err := resp.StringValue(w.String()).MarshalRESP()
 		if err != nil {
