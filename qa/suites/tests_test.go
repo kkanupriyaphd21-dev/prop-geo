@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/tidwall/propgeo/controller"
+	"github.com/tidwall/propgeo/controller/log"
 )
 
 const port = 21098
@@ -69,7 +70,7 @@ func TestServer(t *testing.T) {
 	var done = make(chan bool, 2)
 	var ignoreErrs bool
 	go func() {
-		//	log.Default = log.New(ioutil.Discard, nil)
+		log.Default = log.New(ioutil.Discard, nil)
 		err := controller.ListenAndServeEx("localhost", port, dir, &ln)
 		if err != nil {
 			if !ignoreErrs {
@@ -89,6 +90,7 @@ func TestServer(t *testing.T) {
 	t.Run("Set100KB", SubTestSet100KB)
 	t.Run("Set1MB", SubTestSet1MB)
 	t.Run("Set10MB", SubTestSet10MB)
+	//t.Run("Set600MB", SubTestSet600MB)
 }
 
 func SubTestPingPong(t *testing.T) {
@@ -188,13 +190,16 @@ func testSet(t *testing.T, jsonSize, keyIDSize, frag int) {
 	}
 }
 func SubTestSet100KB(t *testing.T) {
-	testSet(t, 100*1024, 100, 1024)
+	testSet(t, 100*1024, 5000, 1024)
 }
 func SubTestSet1MB(t *testing.T) {
-	testSet(t, 1024*1024, 100, 1024)
+	testSet(t, 1024*1024, 5000, 1024)
 }
 func SubTestSet10MB(t *testing.T) {
-	testSet(t, 10*1024*1024, 100, 1024)
+	testSet(t, 10*1024*1024, 5000, 1024)
+}
+func SubTestSet600MB(t *testing.T) {
+	testSet(t, 0x1FFFFFFF-50, 5000, 16*1024)
 }
 func buildCommand(arg ...string) []byte {
 	var b []byte
