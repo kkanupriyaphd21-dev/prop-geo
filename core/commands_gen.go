@@ -509,29 +509,11 @@ var commandsJSON = `{
           },
           {
             "name": "IDS"
-          },
-          {
-            "name": "OBJECTS"
-          },
-          {
-            "name": "POINTS"
-          },
-          {
-            "name": "BOUNDS"
-          },
-          {
-            "name": "HASHES",
-            "arguments": [
-              {
-                "name": "precision",
-                "type": "integer"
-              }
-            ]
           }
         ]
       }
     ],
-    "since": "1.0.0",
+    "since": "1.4.2",
     "group": "search"
   },
   "SCAN": {
@@ -1293,6 +1275,16 @@ var commandsJSON = `{
   },
   "HOOKS": {
     "summary": "Finds all hooks matching a pattern",
+    "arguments":[
+      {
+        "name": "pattern",
+        "type": "pattern"
+      }
+    ],
+    "group": "webhook"
+  },
+  "PDELHOOK": {
+    "summary": "Removes all hooks matching a pattern",
     "arguments":[
       {
         "name": "pattern",

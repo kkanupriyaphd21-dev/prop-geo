@@ -15,8 +15,10 @@ import (
 	"time"
 
 	"github.com/tidwall/btree"
+	"github.com/tidwall/buntdb"
 	"github.com/tidwall/resp"
 	"github.com/tidwall/propgeo/controller/collection"
+	"github.com/tidwall/propgeo/controller/endpoint"
 	"github.com/tidwall/propgeo/controller/log"
 	"github.com/tidwall/propgeo/controller/server"
 	"github.com/tidwall/propgeo/core"
@@ -24,6 +26,8 @@ import (
 )
 
 var errOOM = errors.New("OOM command not allowed when used memory > 'maxmemory'")
+
+const hookLogPrefix = "hook:log:"
 
 type collectionT struct {
 	Key        string
@@ -54,6 +58,8 @@ type Controller struct {
 	host      string
 	port      int
 	f         *os.File
+	qdb       *buntdb.DB // hook queue log
+	qidx      uint64     // hook queue log last idx
 	cols      *btree.BTree
 	aofsz     int
 	dir       string
@@ -72,6 +78,8 @@ type Controller struct {
 	expires   map[string]map[string]time.Time
 	conns     map[*server.Conn]bool
 	started   time.Time
+
+	epc *endpoint.EndpointManager
 
 	statsTotalConns    int
 	statsTotalCommands int
@@ -106,6 +114,7 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener) error
 		expires:  make(map[string]map[string]time.Time),
 		started:  time.Now(),
 		conns:    make(map[*server.Conn]bool),
+		epc:      endpoint.NewEndpointManager(),
 	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
@@ -113,6 +122,31 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener) error
 	if err := c.loadConfig(); err != nil {
 		return err
 	}
+	// load the queue before the aof
+	qdb, err := buntdb.Open(path.Join(dir, "queue.db"))
+	if err != nil {
+		return err
+	}
+	var qidx uint64
+	if err := qdb.View(func(tx *buntdb.Tx) error {
+		val, err := tx.Get("hook:idx")
+		if err != nil {
+			if err == buntdb.ErrNotFound {
+				return nil
+			}
+			return err
+		}
+		qidx = stringToUint64(val)
+		return nil
+	}); err != nil {
+		return err
+	}
+	err = qdb.CreateIndex("hooks", hookLogPrefix+"*", buntdb.IndexJSONCaseSensitive("hook"))
+	if err != nil {
+		return err
+	}
+	c.qdb = qdb
+	c.qidx = qidx
 	if err := c.migrateAOF(); err != nil {
 		return err
 	}
@@ -355,7 +389,7 @@ func (c *Controller) handleInputCommand(conn *server.Conn, msg *server.Message, 
 	default:
 		c.mu.RLock()
 		defer c.mu.RUnlock()
-	case "set", "del", "drop", "fset", "flushdb", "sethook", "delhook", "expire", "persist":
+	case "set", "del", "drop", "fset", "flushdb", "sethook", "pdelhook", "delhook", "expire", "persist":
 		// write operations
 		write = true
 		c.mu.Lock()
@@ -445,6 +479,8 @@ func (c *Controller) command(msg *server.Message, w io.Writer) (res string, d co
 		res, d, err = c.cmdSetHook(msg)
 	case "delhook":
 		res, d, err = c.cmdDelHook(msg)
+	case "pdelhook":
+		res, d, err = c.cmdPDelHook(msg)
 	case "expire":
 		res, d, err = c.cmdExpire(msg)
 	case "persist":
