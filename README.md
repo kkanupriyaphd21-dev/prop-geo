@@ -43,6 +43,8 @@ PropGeo is an open source (MIT licensed), in-memory geolocation data store, spat
 
 The easiest way to get PropGeo is to use one of the pre-built release binaries which are available for OSX, Linux, and Windows. Instructions for using these binaries are on the GitHub [releases page](https://github.com/tidwall/propgeo/releases).
 
+PropGeo is also available as a [Docker image](https://hub.docker.com/r/propgeo/propgeo/) which is built on top of [Alpine Linux](https://alpinelinux.org/).
+
 If you want to try the latest version, you can build PropGeo from the master branch.
 
 ### Building PropGeo 
