@@ -2,56 +2,85 @@ package geojson
 
 import (
 	"bytes"
+	"encoding/binary"
+	"encoding/json"
 
-	"github.com/tidwall/gjson"
 	"github.com/tidwall/propgeo/geojson/geohash"
 )
 
 // Feature is a geojson object with the type "Feature"
 type Feature struct {
-	Geometry Object
-	BBox     *BBox
-	idprops  string // raw id and properties seperated by a '\0'
+	Geometry   Object
+	BBox       *BBox
+	ID         interface{}
+	Properties map[string]interface{}
 }
 
-func fillFeatureMap(json string) (Feature, []byte, error) {
+func fillFeatureMap(m map[string]interface{}) (Feature, []byte, error) {
 	var g Feature
-	v := gjson.Get(json, "geometry")
-	switch v.Type {
+	switch v := m["geometry"].(type) {
 	default:
 		return g, nil, errInvalidGeometryMember
-	case gjson.Null:
+	case nil:
 		return g, nil, errGeometryMemberRequired
-	case gjson.JSON:
+	case map[string]interface{}:
 		var err error
-		g.Geometry, err = objectMap(v.Raw, feat)
+		g.Geometry, err = objectMap(v, feat)
 		if err != nil {
 			return g, nil, err
 		}
 	}
 	var err error
-	g.BBox, err = fillBBox(json)
+	g.BBox, err = fillBBox(m)
 	if err != nil {
 		return g, nil, err
 	}
-
-	var propsExists bool
-	props := gjson.Get(json, "properties")
-	switch props.Type {
+	switch v := m["properties"].(type) {
 	default:
 		return g, nil, errInvalidPropertiesMember
-	case gjson.Null:
-	case gjson.JSON:
-		propsExists = true
+	case nil:
+	case map[string]interface{}:
+		g.Properties = v
 	}
-	id := gjson.Get(json, "id")
-	if id.Exists() || propsExists {
-		raw := make([]byte, len(id.Raw)+len(props.Raw)+1)
-		copy(raw, id.Raw)
-		copy(raw[len(id.Raw)+1:], props.Raw)
-		g.idprops = string(raw)
-	}
+	g.ID = m["id"]
 	return g, nil, err
+}
+
+func fillFeatureBytes(b []byte, bbox *BBox, isCordZ bool) (Feature, []byte, error) {
+	var err error
+	var g Feature
+	g.BBox = bbox
+	if len(b) < 4 {
+		return g, nil, errNotEnoughData
+	}
+	l := int(binary.LittleEndian.Uint32(b))
+	b = b[4:]
+	if l > 0 {
+		if len(b) < l {
+			return g, nil, errNotEnoughData
+		}
+		var arr []interface{}
+		err = json.Unmarshal(b[:l], &arr)
+		if err != nil {
+			return g, b, err
+		}
+		b = b[l:]
+
+		if len(arr) > 0 {
+			switch v := arr[0].(type) {
+			default:
+				return g, b, errInvalidData
+			case nil:
+			case map[string]interface{}:
+				g.Properties = v
+			}
+		}
+		if len(arr) > 1 {
+			g.ID = arr[1]
+		}
+	}
+	g.Geometry, b, err = objectBytes(b)
+	return g, b, err
 }
 
 // Geohash converts the object to a geohash value.
@@ -85,7 +114,14 @@ func (g Feature) PositionCount() int {
 // Weight returns the in-memory size of the object.
 func (g Feature) Weight() int {
 	res := g.PositionCount() * sizeofPosition
-	res += len(g.idprops)
+	if g.Properties != nil {
+		b, _ := json.Marshal(g.Properties)
+		res += len(b)
+	}
+	if g.ID != nil {
+		b, _ := json.Marshal(g.ID)
+		res += len(b) - 2
+	}
 	return res
 }
 
@@ -94,29 +130,21 @@ func (g Feature) MarshalJSON() ([]byte, error) {
 	return []byte(g.JSON()), nil
 }
 
-func (g Feature) getRaw() (id, props string) {
-	for i := 0; i < len(g.idprops); i++ {
-		if g.idprops[i] == 0 {
-			return g.idprops[:i], g.idprops[i+1:]
-		}
-	}
-	return "", ""
-}
-
 // JSON is the json representation of the object. This might not be exactly the same as the original.
 func (g Feature) JSON() string {
 	var buf bytes.Buffer
 	buf.WriteString(`{"type":"Feature","geometry":`)
 	buf.WriteString(g.Geometry.JSON())
 	g.BBox.write(&buf)
-	idRaw, propsRaw := g.getRaw()
-	if propsRaw != "" {
+	if g.Properties != nil {
 		buf.WriteString(`,"properties":`)
-		buf.WriteString(propsRaw)
+		b, _ := json.Marshal(g.Properties)
+		buf.Write(b)
 	}
-	if idRaw != "" {
+	if g.ID != nil {
 		buf.WriteString(`,"id":`)
-		buf.WriteString(idRaw)
+		b, _ := json.Marshal(g.ID)
+		buf.Write(b)
 	}
 	buf.WriteByte('}')
 	return buf.String()
@@ -129,7 +157,20 @@ func (g Feature) String() string {
 
 // Bytes is the bytes representation of the object.
 func (g Feature) Bytes() []byte {
-	return []byte(g.JSON())
+	var buf bytes.Buffer
+	isCordZ := g.BBox.isCordZDefined()
+	writeHeader(&buf, feature, g.BBox, isCordZ)
+	var pb []byte
+	if g.Properties != nil || g.ID != nil {
+		arr := []interface{}{g.Properties, g.ID}
+		pb, _ = json.Marshal(arr)
+	}
+	b := make([]byte, 4)
+	binary.LittleEndian.PutUint32(b, uint32(len(pb)))
+	buf.Write(b)
+	buf.Write(pb)
+	buf.Write(g.Geometry.Bytes())
+	return buf.Bytes()
 }
 func (g Feature) bboxPtr() *BBox {
 	return g.BBox

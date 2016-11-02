@@ -2,10 +2,9 @@ package geojson
 
 import (
 	"bytes"
-	"math"
 	"strconv"
+	"math"
 
-	"github.com/tidwall/gjson"
 	"github.com/tidwall/propgeo/geojson/poly"
 )
 
@@ -20,38 +19,43 @@ func New2DBBox(minX, minY, maxX, maxY float64) BBox {
 	return BBox{Min: Position{X: minX, Y: minY, Z: 0}, Max: Position{X: maxX, Y: maxY, Z: 0}}
 }
 
-func fillBBox(json string) (*BBox, error) {
+func fillBBox(m map[string]interface{}) (*BBox, error) {
 	var bbox *BBox
-	res := gjson.Get(json, "bbox")
-	switch res.Type {
+	var ok bool
+	switch v := m["bbox"].(type) {
 	default:
 		return nil, errBBoxInvalidType
-	case gjson.Null:
-	case gjson.JSON:
-		v := res.Array()
+	case nil:
+	case []interface{}:
 		if !(len(v) == 4 || len(v) == 6) {
 			return nil, errBBoxInvalidNumberOfValues
 		}
 		bbox = &BBox{}
-		for i := 0; i < len(v); i++ {
-			if v[i].Type != gjson.Number {
-				return nil, errBBoxInvalidValue
-			}
+		if bbox.Min.X, ok = v[0].(float64); !ok {
+			return nil, errBBoxInvalidValue
 		}
-		bbox.Min.X = v[0].Float()
-		bbox.Min.Y = v[1].Float()
+		if bbox.Min.Y, ok = v[1].(float64); !ok {
+			return nil, errBBoxInvalidValue
+		}
 		i := 2
 		if len(v) == 6 {
-			bbox.Min.Z = v[2].Float()
+			if bbox.Min.Z, ok = v[2].(float64); !ok {
+				return nil, errBBoxInvalidValue
+			}
 			i = 3
 		} else {
 			bbox.Min.Z = nilz
 		}
-		bbox.Max.X = v[i+0].Float()
-		bbox.Max.Y = v[i+1].Float()
+		if bbox.Max.X, ok = v[i+0].(float64); !ok {
+			return nil, errBBoxInvalidValue
+		}
+		if bbox.Max.Y, ok = v[i+1].(float64); !ok {
+			return nil, errBBoxInvalidValue
+		}
 		if len(v) == 6 {
-			bbox.Max.Z = v[i+2].Float()
-			i = 3
+			if bbox.Max.Z, ok = v[i+2].(float64); !ok {
+				return nil, errBBoxInvalidValue
+			}
 		} else {
 			bbox.Max.Z = nilz
 		}
@@ -195,7 +199,7 @@ func BBoxBounds(lat, lon, meters float64) (latMin, lonMin, latMax, lonMax float6
 	latMax = lat + r
 
 	latT := math.Asin(math.Sin(lat) / math.Cos(r))
-	lonΔ := math.Acos((math.Cos(r) - math.Sin(latT)*math.Sin(lat)) / (math.Cos(latT) * math.Cos(lat)))
+	lonΔ := math.Acos(( math.Cos(r) - math.Sin(latT) * math.Sin(lat)) / (math.Cos(latT) * math.Cos(lat) ))
 
 	lonMin = lon - lonΔ
 	lonMax = lon + lonΔ
@@ -203,13 +207,13 @@ func BBoxBounds(lat, lon, meters float64) (latMin, lonMin, latMax, lonMax float6
 	// Adjust for north poll
 	if latMax > math.Pi/2 {
 		lonMin = -math.Pi
-		latMax = math.Pi / 2
+		latMax = math.Pi/2
 		lonMax = math.Pi
 	}
 
 	// Adjust for south poll
 	if latMin < -math.Pi/2 {
-		latMin = -math.Pi / 2
+		latMin = -math.Pi/2
 		lonMin = -math.Pi
 		lonMax = math.Pi
 	}
@@ -220,37 +224,37 @@ func BBoxBounds(lat, lon, meters float64) (latMin, lonMin, latMax, lonMax float6
 		lonMax = math.Pi
 	}
 
-	/*
-	   	// Consider splitting area into two bboxes, using the below checks, and erasing above block for performance. See http://janmatuschek.de/LatitudeLongitudeBoundingCoordinates#PolesAnd180thMeridian
+/*
+	// Consider splitting area into two bboxes, using the below checks, and erasing above block for performance. See http://janmatuschek.de/LatitudeLongitudeBoundingCoordinates#PolesAnd180thMeridian
 
-	   	// Adjust for wraparound if minimum longitude is less than -180 degrees.
-	   	if lonMin < -math.Pi {
-	   // box 1:
-	   		latMin = latMin
-	   		latMax = latMax
-	   		lonMin += 2*math.Pi
-	   		lonMax = math.Pi
-	   // box 2:
-	   		latMin = latMin
-	   		latMax = latMax
-	   		lonMin = -math.Pi
-	   		lonMax = lonMax
-	   	}
+	// Adjust for wraparound if minimum longitude is less than -180 degrees.
+	if lonMin < -math.Pi {
+// box 1:
+		latMin = latMin
+		latMax = latMax
+		lonMin += 2*math.Pi
+		lonMax = math.Pi
+// box 2:
+		latMin = latMin
+		latMax = latMax
+		lonMin = -math.Pi
+		lonMax = lonMax
+	}
 
-	   	// Adjust for wraparound if maximum longitude is greater than 180 degrees.
-	   	if lonMax > math.Pi {
-	   // box 1:
-	   		latMin = latMin
-	   		latMax = latMax
-	   		lonMin = lonMin
-	   		lonMax = -math.Pi
-	   // box 2:
-	   		latMin = latMin
-	   		latMax = latMax
-	   		lonMin = -math.Pi
-	   		lonMax -= 2*math.Pi
-	   	}
-	*/
+	// Adjust for wraparound if maximum longitude is greater than 180 degrees.
+	if lonMax > math.Pi {
+// box 1:
+		latMin = latMin
+		latMax = latMax
+		lonMin = lonMin
+		lonMax = -math.Pi
+// box 2:
+		latMin = latMin
+		latMax = latMax
+		lonMin = -math.Pi
+		lonMax -= 2*math.Pi
+	}
+*/
 
 	lonMin = math.Mod(lonMin+3*math.Pi, 2*math.Pi) - math.Pi // normalise to -180..+180°
 	lonMax = math.Mod(lonMax+3*math.Pi, 2*math.Pi) - math.Pi

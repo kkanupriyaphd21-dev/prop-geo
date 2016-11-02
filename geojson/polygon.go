@@ -74,6 +74,10 @@ func (g Polygon) String() string {
 	return g.JSON()
 }
 
+// Bytes is the bytes representation of the object.
+func (g Polygon) Bytes() []byte {
+	return level3Bytes(polygon, g.Coordinates, g.BBox)
+}
 func (g Polygon) bboxPtr() *BBox {
 	return g.BBox
 }

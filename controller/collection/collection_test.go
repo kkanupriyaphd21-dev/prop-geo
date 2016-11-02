@@ -1,6 +1,7 @@
 package collection
 
 import (
+	"bytes"
 	"math/rand"
 	"strconv"
 	"testing"
@@ -54,6 +55,12 @@ func testCollectionVerifyContents(t *testing.T, c *Collection, objs map[string]g
 		j2 := o2.JSON()
 		if j1 != j2 {
 			t.Fatalf("j1 == %s, expect %s", j1, j2)
+		}
+		b2 := o2.Bytes()
+		b1 := o1.Bytes()
+
+		if !bytes.Equal(b1, b2) {
+			t.Fatalf("b1 != b2")
 		}
 	}
 }

@@ -2,17 +2,13 @@ package rtree
 
 import "math"
 
-type float float32
-
-const d3roundValues = true // only set to true when using 32-bit floats
-
-func d3fmin(a, b float) float {
+func d3fmin(a, b float64) float64 {
 	if a < b {
 		return a
 	}
 	return b
 }
-func d3fmax(a, b float) float {
+func d3fmax(a, b float64) float64 {
 	if a > b {
 		return a
 	}
@@ -21,7 +17,7 @@ func d3fmax(a, b float) float {
 
 const (
 	d3numDims            = 3
-	d3maxNodes           = 13
+	d3maxNodes           = 8
 	d3minNodes           = d3maxNodes / 2
 	d3useSphericalVolume = true // Better split classification, may be slower on some systems
 )
@@ -42,8 +38,8 @@ type d3RTree struct {
 
 /// Minimal bounding rectangle (n-dimensional)
 type d3rectT struct {
-	min [d3numDims]float ///< Min dimensions of bounding box
-	max [d3numDims]float ///< Max dimensions of bounding box
+	min [d3numDims]float64 ///< Min dimensions of bounding box
+	max [d3numDims]float64 ///< Max dimensions of bounding box
 }
 
 /// May be data or may be another subtree
@@ -69,41 +65,6 @@ func (node *d3nodeT) isLeaf() bool {
 	return (node.level == 0) // A leaf, contains data
 }
 
-// Rounding constants for float32 -> float64 conversion.
-const d3RNDTOWARDS = (1.0 - 1.0/8388608.0) // Round towards zero
-const d3RNDAWAY = (1.0 + 1.0/8388608.0)    // Round away from zero
-
-// Convert an sqlite3_value into an RtreeValue (presumably a float)
-// while taking care to round toward negative or positive, respectively.
-func d3rtreeValueDown(d float64) float {
-	if !d3roundValues {
-		return float(d)
-	}
-	f := float(d)
-	if float64(f) > d {
-		if d < 0 {
-			f = float(d * d3RNDAWAY)
-		} else {
-			f = float(d * d3RNDTOWARDS)
-		}
-	}
-	return f
-}
-func d3rtreeValueUp(d float64) float {
-	if !d3roundValues {
-		return float(d)
-	}
-	f := float(d)
-	if float64(f) < d {
-		if d < 0 {
-			f = float(d * d3RNDTOWARDS)
-		} else {
-			f = float(d * d3RNDAWAY)
-		}
-	}
-	return f
-}
-
 /// A link list of nodes for reinsertion after a delete operation
 type d3listNodeT struct {
 	next *d3listNodeT ///< Next in list
@@ -119,12 +80,12 @@ type d3partitionVarsT struct {
 	minFill   int
 	count     [2]int
 	cover     [2]d3rectT
-	area      [2]float
+	area      [2]float64
 
 	branchBuf      [d3maxNodes + 1]d3branchT
 	branchCount    int
 	coverSplit     d3rectT
-	coverSplitArea float
+	coverSplitArea float64
 }
 
 func d3New() *d3RTree {
@@ -143,8 +104,8 @@ func (tr *d3RTree) Insert(min, max [d3numDims]float64, dataId interface{}) {
 	var branch d3branchT
 	branch.data = dataId
 	for axis := 0; axis < d3numDims; axis++ {
-		branch.rect.min[axis] = d3rtreeValueDown(min[axis])
-		branch.rect.max[axis] = d3rtreeValueUp(max[axis])
+		branch.rect.min[axis] = min[axis]
+		branch.rect.max[axis] = max[axis]
 	}
 	d3insertRect(&branch, &tr.root, 0)
 }
@@ -156,8 +117,8 @@ func (tr *d3RTree) Insert(min, max [d3numDims]float64, dataId interface{}) {
 func (tr *d3RTree) Remove(min, max [d3numDims]float64, dataId interface{}) {
 	var rect d3rectT
 	for axis := 0; axis < d3numDims; axis++ {
-		rect.min[axis] = d3rtreeValueDown(min[axis])
-		rect.max[axis] = d3rtreeValueUp(max[axis])
+		rect.min[axis] = min[axis]
+		rect.max[axis] = max[axis]
 	}
 	d3removeRect(&rect, dataId, &tr.root)
 }
@@ -172,8 +133,8 @@ func (tr *d3RTree) Remove(min, max [d3numDims]float64, dataId interface{}) {
 func (tr *d3RTree) Search(min, max [d3numDims]float64, resultCallback func(data interface{}) bool) int {
 	var rect d3rectT
 	for axis := 0; axis < d3numDims; axis++ {
-		rect.min[axis] = d3rtreeValueDown(min[axis])
-		rect.max[axis] = d3rtreeValueUp(max[axis])
+		rect.min[axis] = min[axis]
+		rect.max[axis] = max[axis]
 	}
 	foundCount, _ := d3search(tr.root, rect, 0, resultCallback)
 	return foundCount
@@ -326,10 +287,10 @@ func d3disconnectBranch(node *d3nodeT, index int) {
 // the best resolution when searching.
 func d3pickBranch(rect *d3rectT, node *d3nodeT) int {
 	var firstTime bool = true
-	var increase float
-	var bestIncr float = -1
-	var area float
-	var bestArea float
+	var increase float64
+	var bestIncr float64 = -1
+	var area float64
+	var bestArea float64
 	var best int
 	var tempRect d3rectT
 
@@ -389,8 +350,8 @@ func d3splitNode(node *d3nodeT, branch *d3branchT, newNode **d3nodeT) {
 }
 
 // Calculate the n-dimensional volume of a rectangle
-func d3rectVolume(rect *d3rectT) float {
-	var volume float = 1
+func d3rectVolume(rect *d3rectT) float64 {
+	var volume float64 = 1
 	for index := 0; index < d3numDims; index++ {
 		volume *= rect.max[index] - rect.min[index]
 	}
@@ -403,31 +364,30 @@ func d3rectSphericalVolume(rect *d3rectT) float64 {
 	var radius float64
 
 	for index := 0; index < d3numDims; index++ {
-		halfExtent := float64(rect.max[index]-rect.min[index]) * 0.5
+		halfExtent := (rect.max[index] - rect.min[index]) * 0.5
 		sumOfSquares += halfExtent * halfExtent
 	}
 
 	radius = math.Sqrt(sumOfSquares)
 
 	// Pow maybe slow, so test for common dims just use x*x, x*x*x.
-	switch d3numDims {
-	default:
-		return (math.Pow(radius, d3numDims) * d3unitSphereVolume)
-	case 2:
-		return (radius * radius * d3unitSphereVolume)
-	case 3:
-		return (radius * radius * radius * d3unitSphereVolume)
-	case 4:
-		return (radius * radius * radius * radius * d3unitSphereVolume)
-	case 5:
+	if d3numDims == 5 {
 		return (radius * radius * radius * radius * radius * d3unitSphereVolume)
+	} else if d3numDims == 4 {
+		return (radius * radius * radius * radius * d3unitSphereVolume)
+	} else if d3numDims == 3 {
+		return (radius * radius * radius * d3unitSphereVolume)
+	} else if d3numDims == 2 {
+		return (radius * radius * d3unitSphereVolume)
+	} else {
+		return (math.Pow(radius, d3numDims) * d3unitSphereVolume)
 	}
 }
 
 // Use one of the methods to calculate retangle volume
-func d3calcRectVolume(rect *d3rectT) float {
+func d3calcRectVolume(rect *d3rectT) float64 {
 	if d3useSphericalVolume {
-		return float(d3rectSphericalVolume(rect)) // Slower but helps certain merge cases
+		return d3rectSphericalVolume(rect) // Slower but helps certain merge cases
 	} else { // RTREE_USE_SPHERICAL_VOLUME
 		return d3rectVolume(rect) // Faster but can cause poor merges
 	} // RTREE_USE_SPHERICAL_VOLUME
@@ -462,7 +422,7 @@ func d3getBranches(node *d3nodeT, branch *d3branchT, parVars *d3partitionVarsT) 
 // fill requirement) then other group gets the rest.
 // These last are the ones that can go in either group most easily.
 func d3choosePartition(parVars *d3partitionVarsT, minFill int) {
-	var biggestDiff float
+	var biggestDiff float64
 	var group, chosen, betterGroup int
 
 	d3initParVars(parVars, parVars.branchCount, minFill)
@@ -541,8 +501,8 @@ func d3initParVars(parVars *d3partitionVarsT, maxRects, minFill int) {
 
 func d3pickSeeds(parVars *d3partitionVarsT) {
 	var seed0, seed1 int
-	var worst, waste float
-	var area [d3maxNodes + 1]float
+	var worst, waste float64
+	var area [d3maxNodes + 1]float64
 
 	for index := 0; index < parVars.total; index++ {
 		area[index] = d3calcRectVolume(&parVars.branchBuf[index].rect)
