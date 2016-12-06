@@ -32,6 +32,7 @@ PropGeo is an open source (MIT licensed), in-memory geolocation data store, spat
 - Full [command line interface](#cli).
 - Leader / follower [replication](#replication).
 - In-memory database that persists on disk.
+- All coordinates are in [WGS 84 Web Mercator / EPSG:3857](#coordinate-system)
 
 ## Components
 - `propgeo-server ` - The server
@@ -76,6 +77,12 @@ $ ./propgeo-server
 $ ./propgeo-cli
 > help
 ```
+
+## Coordinate System
+It's important to note that the coordinate system PropGeo uses is 
+[WGS 84 Web Mercator](https://en.wikipedia.org/wiki/Web_Mercator), also known 
+as EPSG:3857. All distance are in meters and all calcuations are done on a spherical surface, 
+not a plane.
 
 ## <a name="cli"></a>Playing with PropGeo
 
