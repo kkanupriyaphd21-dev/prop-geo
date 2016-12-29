@@ -671,6 +671,12 @@ var commandsJSON = `{
         "optional": true
       },
       {
+        "command": "COMMAND",
+        "name": ["which"],
+        "type": ["string"],
+        "optional": true
+      },
+      {
         "name": "type",
         "optional": true,
         "enumargs": [
@@ -797,6 +803,12 @@ var commandsJSON = `{
       {
         "command": "DETECT",
         "name": ["what"],
+        "type": ["string"],
+        "optional": true
+      },
+      {
+        "command": "COMMAND",
+        "name": ["which"],
         "type": ["string"],
         "optional": true
       },
@@ -971,6 +983,12 @@ var commandsJSON = `{
       {
         "command": "DETECT",
         "name": ["what"],
+        "type": ["string"],
+        "optional": true
+      },
+      {
+        "command": "COMMAND",
+        "name": ["which"],
         "type": ["string"],
         "optional": true
       },
@@ -1249,6 +1267,13 @@ var commandsJSON = `{
         "type": "string"
       },
       {
+        "command": "META",
+        "name": ["name", "value"],
+        "type": ["string", "string"],
+        "optional": true,
+		"multiple": true
+      },
+      {
         "enum": ["NEARBY", "WITHIN", "INTERSECTS"]
       },
       {
@@ -1263,6 +1288,12 @@ var commandsJSON = `{
       {
         "command": "DETECT",
         "name": ["what"],
+        "type": ["string"],
+        "optional": true
+      },
+      {
+        "command": "COMMAND",
+        "name": ["which"],
         "type": ["string"],
         "optional": true
       },
@@ -1304,5 +1335,19 @@ var commandsJSON = `{
       }
     ],
     "group": "webhook"
+  },
+  "PDEL": {
+    "summary": "Removes all objects matching a pattern",
+    "arguments":[
+      {
+        "name": "key",
+        "type": "string"
+      },
+	  {
+        "name": "pattern",
+        "type": "pattern"
+      }
+    ],
+    "group": "keys"
   }
 }`
