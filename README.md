@@ -41,11 +41,11 @@ PropGeo is an open source (MIT licensed), in-memory geolocation data store, spat
 
 ### Getting PropGeo
 
-The easiest way to get PropGeo is to use one of the pre-built release binaries which are available for OSX, Linux, and Windows. Instructions for using these binaries are on the GitHub [releases page](https://github.com/tidwall/propgeo/releases).
+The easiest way to get the latest PropGeo is to use one of the pre-built release binaries which are available for OSX, Linux, and Windows. Instructions for using these binaries are on the GitHub [releases page](https://github.com/tidwall/propgeo/releases).
+
+Mac users who use Homebrew can install with `brew install propgeo`.
 
 PropGeo is also available as a [Docker image](https://hub.docker.com/r/propgeo/propgeo/) which is built on top of [Alpine Linux](https://alpinelinux.org/).
-
-If you want to try the latest version, you can build PropGeo from the master branch.
 
 ### Building PropGeo 
 
@@ -292,14 +292,16 @@ PropGeo uses the [Redis RESP](http://redis.io/topics/protocol) protocol natively
 - Clojure: [carmine](https://github.com/ptaoussanis/carmine)
 - Common Lisp: [CL-Redis](https://github.com/vseloved/cl-redis)
 - Erlang: [Eredis](https://github.com/wooga/eredis)
-- Go: [Redigo](https://github.com/garyburd/redigo)
+- Go: [go-redis](https://github.com/go-redis/redis) ([example code](https://github.com/tidwall/propgeo/wiki/Go-example-(go-redis)))
+- Go: [redigo](https://github.com/garyburd/redigo) ([example code](https://github.com/tidwall/propgeo/wiki/Go-example-(redigo)))
 - Haskell: [hedis](https://github.com/informatikr/hedis)
 - Java: [lettuce](https://github.com/mp911de/lettuce)
-- Node.js: [node_redis](https://github.com/NodeRedis/node_redis) >> [example code](https://github.com/tidwall/propgeo/wiki/node_redis-example)
+- Node.js: [node_redis](https://github.com/NodeRedis/node_redis) ([example code](https://github.com/tidwall/propgeo/wiki/Node.js-example))
 - Perl: [perl-redis](https://github.com/PerlRedis/perl-redis)
 - PHP: [phpredis](https://github.com/phpredis/phpredis)
-- Python: [redis-py](https://github.com/andymccurdy/redis-py)
-- Ruby: [redic](https://github.com/amakawa/redic), [redis-rb](https://github.com/redis/redis-rb)
+- Python: [redis-py](https://github.com/andymccurdy/redis-py) ([example code](https://github.com/tidwall/propgeo/wiki/Python-example))
+- Ruby: [redic](https://github.com/amakawa/redic) ([example code](https://github.com/tidwall/propgeo/wiki/Ruby-example-(redic)))
+- Ruby: [redis-rb](https://github.com/redis/redis-rb) ([example code](https://github.com/tidwall/propgeo/wiki/Ruby-example-(redis-rb)))
 - Rust: [redis-rs](https://github.com/mitsuhiko/redis-rs)
 - Scala: [scala-redis](https://github.com/debasishg/scala-redis)
 - Swift: [Redbird](https://github.com/czechboy0/Redbird)
