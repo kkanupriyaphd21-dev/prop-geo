@@ -1,6 +1,6 @@
 FROM alpine:3.4
 
-ENV PROPGEO_VERSION 1.7.0
+ENV PROPGEO_VERSION 1.7.5
 ENV PROPGEO_DOWNLOAD_URL https://github.com/tidwall/propgeo/releases/download/$PROPGEO_VERSION/propgeo-$PROPGEO_VERSION-linux-amd64.tar.gz
 
 RUN addgroup -S propgeo && adduser -S -G propgeo propgeo
