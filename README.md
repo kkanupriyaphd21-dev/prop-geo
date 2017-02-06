@@ -285,7 +285,7 @@ The server will respond in [JSON](http://json.org) or [RESP](http://redis.io/top
 
 ## Client Libraries
 
-PropGeo uses the [Redis RESP](http://redis.io/topics/protocol) protocol natively. Therefore all clients that support basic Redis commands will in turn support PropGeo. Below are a few of the popular clients. For a more complete list, please see the [Redis Clients](http://redis.io/clients) page.
+PropGeo uses the [Redis RESP](http://redis.io/topics/protocol) protocol natively. Therefore most clients that support basic Redis commands will in turn support PropGeo. Below are a few of the popular clients. 
 
 - C: [hiredis](https://github.com/redis/hiredis)
 - C#: [StackExchange.Redis](https://github.com/StackExchange/StackExchange.Redis)
@@ -297,6 +297,7 @@ PropGeo uses the [Redis RESP](http://redis.io/topics/protocol) protocol natively
 - Go: [redigo](https://github.com/garyburd/redigo) ([example code](https://github.com/tidwall/propgeo/wiki/Go-example-(redigo)))
 - Haskell: [hedis](https://github.com/informatikr/hedis)
 - Java: [lettuce](https://github.com/mp911de/lettuce)
+- Node.js: [node-propgeo](https://github.com/phulst/node-propgeo)
 - Node.js: [node_redis](https://github.com/NodeRedis/node_redis) ([example code](https://github.com/tidwall/propgeo/wiki/Node.js-example))
 - Perl: [perl-redis](https://github.com/PerlRedis/perl-redis)
 - PHP: [phpredis](https://github.com/phpredis/phpredis)
