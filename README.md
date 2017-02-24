@@ -5,7 +5,7 @@
 </p>
 <p align="center">
 <a href="https://gitter.im/propgeo/propgeo?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge"><img src="https://badges.gitter.im/Join%20Chat.svg" alt="Gitter"></a>
-<a href="https://github.com/tidwall/propgeo/releases"><img src="https://img.shields.io/badge/version-1.7.5-green.svg?" alt="Version"></a>
+<a href="https://github.com/tidwall/propgeo/releases"><img src="https://img.shields.io/badge/version-1.8.0-green.svg?" alt="Version"></a>
 <a href="https://travis-ci.org/tidwall/propgeo"><img src="https://travis-ci.org/tidwall/propgeo.svg?branch=master" alt="Build Status"></a>
 <a href="https://hub.docker.com/r/propgeo/propgeo"><img src="https://img.shields.io/badge/docker-ready-blue.svg" alt="Docker Ready"></a>
 </p>
@@ -296,9 +296,9 @@ PropGeo uses the [Redis RESP](http://redis.io/topics/protocol) protocol natively
 - Go: [go-redis](https://github.com/go-redis/redis) ([example code](https://github.com/tidwall/propgeo/wiki/Go-example-(go-redis)))
 - Go: [redigo](https://github.com/garyburd/redigo) ([example code](https://github.com/tidwall/propgeo/wiki/Go-example-(redigo)))
 - Haskell: [hedis](https://github.com/informatikr/hedis)
-- Java: [lettuce](https://github.com/mp911de/lettuce)
-- Node.js: [node-propgeo](https://github.com/phulst/node-propgeo)
-- Node.js: [node_redis](https://github.com/NodeRedis/node_redis) ([example code](https://github.com/tidwall/propgeo/wiki/Node.js-example))
+- Java: [lettuce](https://github.com/mp911de/lettuce) ([example code](https://github.com/tidwall/propgeo/wiki/Java-example-(lettuce)))
+- Node.js: [node-propgeo](https://github.com/phulst/node-propgeo) ([example code](https://github.com/tidwall/propgeo/wiki/Node.js-example-(node-propgeo)))
+- Node.js: [node_redis](https://github.com/NodeRedis/node_redis) ([example code](https://github.com/tidwall/propgeo/wiki/Node.js-example-(node-redis)))
 - Perl: [perl-redis](https://github.com/PerlRedis/perl-redis)
 - PHP: [phpredis](https://github.com/phpredis/phpredis)
 - Python: [redis-py](https://github.com/andymccurdy/redis-py) ([example code](https://github.com/tidwall/propgeo/wiki/Python-example))
