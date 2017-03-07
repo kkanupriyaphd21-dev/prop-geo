@@ -19,6 +19,8 @@ const (
 	Disque = EndpointProtocol("disque") // Disque
 	GRPC   = EndpointProtocol("grpc")   // GRPC
 	Redis  = EndpointProtocol("redis")  // Redis
+	Kafka  = EndpointProtocol("kafka")  // Kafka
+	MQTT   = EndpointProtocol("mqtt")   // MQTT
 )
 
 // Endpoint represents an endpoint.
@@ -42,6 +44,16 @@ type Endpoint struct {
 		Port    int
 		Channel string
 	}
+	Kafka struct {
+		Host      string
+		Port      int
+		QueueName string
+	}
+	MQTT struct {
+		Host      string
+		Port      int
+		QueueName string
+	}
 }
 
 type EndpointConn interface {
@@ -61,6 +73,9 @@ func NewEndpointManager() *EndpointManager {
 	go epc.Run()
 	return epc
 }
+
+// Manage connection at enpoints
+// If some connection expired we should delete it
 func (epc *EndpointManager) Run() {
 	for {
 		time.Sleep(time.Second)
@@ -104,6 +119,10 @@ func (epc *EndpointManager) Send(endpoint, val string) error {
 				conn = newGRPCEndpointConn(ep)
 			case Redis:
 				conn = newRedisEndpointConn(ep)
+			case Kafka:
+				conn = newKafkaEndpointConn(ep)
+			case MQTT:
+				conn = newMQTTEndpointConn(ep)
 			}
 			epc.conns[endpoint] = conn
 		}
@@ -138,6 +157,10 @@ func parseEndpoint(s string) (Endpoint, error) {
 		endpoint.Protocol = GRPC
 	case strings.HasPrefix(s, "redis:"):
 		endpoint.Protocol = Redis
+	case strings.HasPrefix(s, "kafka:"):
+		endpoint.Protocol = Kafka
+	case strings.HasPrefix(s, "mqtt:"):
+		endpoint.Protocol = MQTT
 	}
 
 	s = s[strings.Index(s, ":")+1:]
@@ -240,6 +263,74 @@ func parseEndpoint(s string) (Endpoint, error) {
 		}
 		if endpoint.Disque.QueueName == "" {
 			return endpoint, errors.New("missing disque queue name")
+		}
+	}
+
+	if endpoint.Protocol == Kafka {
+		// Parsing connection from URL string
+		hp := strings.Split(s, ":")
+		switch len(hp) {
+		default:
+			return endpoint, errors.New("invalid kafka url")
+		case 1:
+			endpoint.Kafka.Host = hp[0]
+			endpoint.Kafka.Port = 9092
+		case 2:
+			n, err := strconv.ParseUint(hp[1], 10, 16)
+			if err != nil {
+				return endpoint, errors.New("invalid kafka url port")
+			}
+
+			endpoint.Kafka.Host = hp[0]
+			endpoint.Kafka.Port = int(n)
+		}
+
+		// Parsing Kafka queue name
+		if len(sp) > 1 {
+			var err error
+			endpoint.Kafka.QueueName, err = url.QueryUnescape(sp[1])
+			if err != nil {
+				return endpoint, errors.New("invalid kafka topic name")
+			}
+		}
+
+		// Throw error if we not provide any queue name
+		if endpoint.Kafka.QueueName == "" {
+			return endpoint, errors.New("missing kafka topic name")
+		}
+	}
+
+	if endpoint.Protocol == MQTT {
+		// Parsing connection from URL string
+		hp := strings.Split(s, ":")
+		switch len(hp) {
+		default:
+			return endpoint, errors.New("invalid MQTT url")
+		case 1:
+			endpoint.MQTT.Host = hp[0]
+			endpoint.MQTT.Port = 1883
+		case 2:
+			n, err := strconv.ParseUint(hp[1], 10, 16)
+			if err != nil {
+				return endpoint, errors.New("invalid MQTT url port")
+			}
+
+			endpoint.MQTT.Host = hp[0]
+			endpoint.MQTT.Port = int(n)
+		}
+
+		// Parsing MQTT queue name
+		if len(sp) > 1 {
+			var err error
+			endpoint.MQTT.QueueName, err = url.QueryUnescape(sp[1])
+			if err != nil {
+				return endpoint, errors.New("invalid MQTT topic name")
+			}
+		}
+
+		// Throw error if we not provide any queue name
+		if endpoint.MQTT.QueueName == "" {
+			return endpoint, errors.New("missing MQTT topic name")
 		}
 	}
 
