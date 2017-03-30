@@ -35,8 +35,9 @@ PropGeo is an open source (MIT licensed), in-memory geolocation data store, spat
 - All coordinates are in [WGS 84 Web Mercator / EPSG:3857](#coordinate-system)
 
 ## Components
-- `propgeo-server ` - The server
-- `propgeo-cli    ` - Command line interface tool
+- `propgeo-server    ` - The server
+- `propgeo-cli       ` - Command line interface tool
+- `propgeo-benchmark ` - Server benchmark tool
 
 ## Getting Started
 
