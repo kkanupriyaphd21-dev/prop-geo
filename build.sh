@@ -85,9 +85,11 @@ package(){
 	if [ "$2" == "windows" ]; then
 		mv propgeo-server packages/$bdir/propgeo-server.exe
 		mv propgeo-cli packages/$bdir/propgeo-cli.exe
+		mv propgeo-benchmark packages/$bdir/propgeo-benchmark.exe
 	else
 		mv propgeo-server packages/$bdir
 		mv propgeo-cli packages/$bdir
+		mv propgeo-benchmark packages/$bdir
 	fi
 	cp README.md packages/$bdir
 	cp CHANGELOG.md packages/$bdir
@@ -152,6 +154,7 @@ fi
 # build and store objects into original directory.
 go build -ldflags "$LDFLAGS" -o "$OD/propgeo-server" cmd/propgeo-server/*.go
 go build -ldflags "$LDFLAGS" -o "$OD/propgeo-cli" cmd/propgeo-cli/*.go
+go build -ldflags "$LDFLAGS" -o "$OD/propgeo-benchmark" cmd/propgeo-benchmark/*.go
 
 # test if requested
 if [ "$1" == "test" ]; then
