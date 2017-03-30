@@ -3,6 +3,7 @@ all:
 clean:
 	rm -f propgeo-server
 	rm -f propgeo-cli
+	rm -f propgeo-benchmark
 test:
 	@./build.sh test
 cover:
@@ -10,8 +11,11 @@ cover:
 install: all
 	cp propgeo-server /usr/local/bin
 	cp propgeo-cli /usr/local/bin
+	cp propgeo-benchmark /usr/local/bin
 uninstall: 
 	rm -f /usr/local/bin/propgeo-server
 	rm -f /usr/local/bin/propgeo-cli
+	rm -f /usr/local/bin/propgeo-benchmark
+package:
 package:
 	@./build.sh package
