@@ -13,6 +13,7 @@ RUN apk update \
     && tar -xzvf propgeo.tar.gz \
     && rm -f propgeo.tar.gz \
     && mv propgeo-$PROPGEO_VERSION-linux-amd64/propgeo-server /usr/local/bin \
+    && mv propgeo-$PROPGEO_VERSION-linux-amd64/propgeo-cli /usr/local/bin \
     && rm -fR propgeo-$PROPGEO_VERSION-linux-amd64
 
 RUN mkdir /data && chown propgeo:propgeo /data
