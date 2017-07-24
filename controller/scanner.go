@@ -41,6 +41,7 @@ type scanWriter struct {
 	wheres         []whereT
 	numberItems    uint64
 	nofields       bool
+	cursor         uint64
 	limit          uint64
 	hitLimit       bool
 	once           bool
@@ -55,17 +56,17 @@ type scanWriter struct {
 }
 
 type ScanWriterParams struct {
-	id string
-	o geojson.Object
-	fields []float64
+	id       string
+	o        geojson.Object
+	fields   []float64
 	distance float64
-	noLock bool
+	noLock   bool
 }
 
 func (c *Controller) newScanWriter(
 	wr *bytes.Buffer, msg *server.Message, key string, output outputT,
 	precision uint64, globPattern string, matchValues bool,
-	limit uint64, wheres []whereT, nofields bool,
+	cursor, limit uint64, wheres []whereT, nofields bool,
 ) (
 	*scanWriter, error,
 ) {
@@ -83,6 +84,7 @@ func (c *Controller) newScanWriter(
 		c:           c,
 		wr:          wr,
 		msg:         msg,
+		cursor:      cursor,
 		limit:       limit,
 		wheres:      wheres,
 		output:      output,
@@ -149,9 +151,10 @@ func (sw *scanWriter) writeHead() {
 	}
 }
 
-func (sw *scanWriter) writeFoot(cursor uint64) {
+func (sw *scanWriter) writeFoot() {
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
+	cursor := sw.cursor + sw.numberItems
 	if !sw.hitLimit {
 		cursor = 0
 	}
@@ -272,6 +275,9 @@ func (sw *scanWriter) writeObject(opts ScanWriterParams) bool {
 		return true
 	}
 	sw.count++
+	if sw.count <= sw.cursor {
+		return true
+	}
 	if sw.output == outputCount {
 		return true
 	}
@@ -386,16 +392,17 @@ func (sw *scanWriter) writeObject(opts ScanWriterParams) bool {
 				}))
 			}
 
-			fvs := orderFields(sw.fmap, opts.fields)
-			if len(fvs) > 0 {
-				fvals := make([]resp.Value, 0, len(fvs)*2)
-				for i, fv := range fvs {
-					fvals = append(fvals, resp.StringValue(fv.field), resp.StringValue(strconv.FormatFloat(fv.value, 'f', -1, 64)))
-					i++
+			if sw.hasFieldsOutput() {
+				fvs := orderFields(sw.fmap, opts.fields)
+				if len(fvs) > 0 {
+					fvals := make([]resp.Value, 0, len(fvs)*2)
+					for i, fv := range fvs {
+						fvals = append(fvals, resp.StringValue(fv.field), resp.StringValue(strconv.FormatFloat(fv.value, 'f', -1, 64)))
+						i++
+					}
+					vals = append(vals, resp.ArrayValue(fvals))
 				}
-				vals = append(vals, resp.ArrayValue(fvals))
 			}
-
 			if opts.distance > 0 {
 				vals = append(vals, resp.FloatValue(opts.distance))
 			}
