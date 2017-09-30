@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -76,7 +77,7 @@ type Controller struct {
 	cols      *btree.BTree
 	aofsz     int
 	dir       string
-	config    Config
+	config    *Config
 	followc   uint64 // counter increases when follow property changes
 	follows   map[*bytes.Buffer]bool
 	fcond     *sync.Cond
@@ -98,17 +99,18 @@ type Controller struct {
 
 	epc *endpoint.EndpointManager
 
-	statsTotalConns    int
-	statsTotalCommands int
-	statsExpired       int
+	// counters
+	statsTotalConns    aint
+	statsTotalCommands aint
+	statsExpired       aint
 
 	lastShrinkDuration time.Duration
 	currentShrinkStart time.Time
 
-	stopBackgroundExpiring bool
-	stopWatchingMemory     bool
-	stopWatchingAutoGC     bool
-	outOfMemory            bool
+	stopBackgroundExpiring abool
+	stopWatchingMemory     abool
+	stopWatchingAutoGC     abool
+	outOfMemory            abool
 }
 
 // ListenAndServe starts a new propgeo server
@@ -138,7 +140,9 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener, http 
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	if err := c.loadConfig(); err != nil {
+	var err error
+	c.config, err = loadConfig(filepath.Join(dir, "config"))
+	if err != nil {
 		return err
 	}
 	// load the queue before the aof
@@ -177,12 +181,10 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener, http 
 	if err := c.loadAOF(); err != nil {
 		return err
 	}
-	c.mu.Lock()
 	c.fillExpiresList()
-	if c.config.FollowHost != "" {
-		go c.follow(c.config.FollowHost, c.config.FollowPort, c.followc)
+	if c.config.followHost() != "" {
+		go c.follow(c.config.followHost(), c.config.followPort(), c.followc)
 	}
-	c.mu.Unlock()
 	defer func() {
 		c.mu.Lock()
 		c.followc++ // this will force any follow communication to die
@@ -193,18 +195,16 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener, http 
 	go c.watchGC()
 	go c.backgroundExpiring()
 	defer func() {
-		c.mu.Lock()
-		c.stopBackgroundExpiring = true
-		c.stopWatchingMemory = true
-		c.stopWatchingAutoGC = true
-		c.mu.Unlock()
+		c.stopBackgroundExpiring.set(true)
+		c.stopWatchingMemory.set(true)
+		c.stopWatchingAutoGC.set(true)
 	}()
 	handler := func(conn *server.Conn, msg *server.Message, rd *server.AnyReaderWriter, w io.Writer, websocket bool) error {
 		c.mu.Lock()
 		if cc, ok := c.conns[conn]; ok {
 			cc.last = time.Now()
 		}
-		c.statsTotalCommands++
+		c.statsTotalCommands.add(1)
 		c.mu.Unlock()
 		err := c.handleInputCommand(conn, msg, w)
 		if err != nil {
@@ -225,31 +225,32 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener, http 
 			return false
 		}
 		c.mu.RLock()
-		is := c.config.ProtectedMode != "no" && c.config.RequirePass == ""
+		is := c.config.protectedMode() != "no" && c.config.requirePass() == ""
 		c.mu.RUnlock()
 		return is
 	}
-	var clientId uint64
 
+	var clientID uint64
 	opened := func(conn *server.Conn) {
 		c.mu.Lock()
-		if c.config.KeepAlive > 0 {
+		if c.config.keepAlive() > 0 {
 			err := conn.SetKeepAlive(
-				time.Duration(c.config.KeepAlive) * time.Second)
+				time.Duration(c.config.keepAlive()) * time.Second)
 			if err != nil {
 				log.Warnf("could not set keepalive for connection: %v",
 					conn.RemoteAddr().String())
 			}
 		}
-		clientId++
+		clientID++
 		c.conns[conn] = &clientConn{
-			id:     clientId,
+			id:     clientID,
 			opened: time.Now(),
 			conn:   conn,
 		}
-		c.statsTotalConns++
+		c.statsTotalConns.add(1)
 		c.mu.Unlock()
 	}
+
 	closed := func(conn *server.Conn) {
 		c.mu.Lock()
 		delete(c.conns, conn)
@@ -266,19 +267,18 @@ func (c *Controller) watchGC() {
 	for range t.C {
 		c.mu.RLock()
 
-		if c.stopWatchingAutoGC {
+		if c.stopWatchingAutoGC.on() {
 			c.mu.RUnlock()
 			return
 		}
 
-		autoGC := c.config.AutoGC
 		c.mu.RUnlock()
 
-		if autoGC == 0 {
+		if c.config.autoGC() == 0 {
 			continue
 		}
 
-		if time.Now().Sub(s) < time.Second*time.Duration(autoGC) {
+		if time.Now().Sub(s) < time.Second*time.Duration(c.config.autoGC()) {
 			continue
 		}
 
@@ -306,17 +306,16 @@ func (c *Controller) watchMemory() {
 	for range t.C {
 		func() {
 			c.mu.RLock()
-			if c.stopWatchingMemory {
+			if c.stopWatchingMemory.on() {
 				c.mu.RUnlock()
 				return
 			}
-			maxmem := c.config.MaxMemory
-			oom := c.outOfMemory
+			oom := c.outOfMemory.on()
 			c.mu.RUnlock()
-			if maxmem == 0 {
+			if c.config.maxMemory() == 0 {
 				if oom {
 					c.mu.Lock()
-					c.outOfMemory = false
+					c.outOfMemory.set(false)
 					c.mu.Unlock()
 				}
 				return
@@ -326,7 +325,7 @@ func (c *Controller) watchMemory() {
 			}
 			runtime.ReadMemStats(&mem)
 			c.mu.Lock()
-			c.outOfMemory = int(mem.HeapAlloc) > maxmem
+			c.outOfMemory.set(int(mem.HeapAlloc) > c.config.maxMemory())
 			c.mu.Unlock()
 		}()
 	}
@@ -443,10 +442,7 @@ func (c *Controller) handleInputCommand(conn *server.Conn, msg *server.Message, 
 	var write bool
 
 	if !conn.Authenticated || msg.Command == "auth" {
-		c.mu.RLock()
-		requirePass := c.config.RequirePass
-		c.mu.RUnlock()
-		if requirePass != "" {
+		if c.config.requirePass() != "" {
 			password := ""
 			// This better be an AUTH command or the Message should contain an Auth
 			if msg.Command != "auth" && msg.Auth == "" {
@@ -460,7 +456,7 @@ func (c *Controller) handleInputCommand(conn *server.Conn, msg *server.Message, 
 					password = msg.Values[1].String()
 				}
 			}
-			if requirePass != strings.TrimSpace(password) {
+			if c.config.requirePass() != strings.TrimSpace(password) {
 				return writeErr(errors.New("invalid password"))
 			}
 			conn.Authenticated = true
@@ -482,10 +478,10 @@ func (c *Controller) handleInputCommand(conn *server.Conn, msg *server.Message, 
 		write = true
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		if c.config.FollowHost != "" {
+		if c.config.followHost() != "" {
 			return writeErr(errors.New("not the leader"))
 		}
-		if c.config.ReadOnly {
+		if c.config.readOnly() {
 			return writeErr(errors.New("read only"))
 		}
 	case "get", "keys", "scan", "nearby", "within", "intersects", "hooks", "search",
@@ -493,7 +489,7 @@ func (c *Controller) handleInputCommand(conn *server.Conn, msg *server.Message, 
 		// read operations
 		c.mu.RLock()
 		defer c.mu.RUnlock()
-		if c.config.FollowHost != "" && !c.fcuponce {
+		if c.config.followHost() != "" && !c.fcuponce {
 			return writeErr(errors.New("catching up to leader"))
 		}
 	case "follow", "readonly", "config":

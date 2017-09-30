@@ -76,9 +76,9 @@ func (c *Controller) cmdServer(msg *server.Message) (res string, err error) {
 		return "", errInvalidNumberOfArguments
 	}
 	m := make(map[string]interface{})
-	m["id"] = c.config.ServerID
-	if c.config.FollowHost != "" {
-		m["following"] = fmt.Sprintf("%s:%d", c.config.FollowHost, c.config.FollowPort)
+	m["id"] = c.config.serverID()
+	if c.config.followHost() != "" {
+		m["following"] = fmt.Sprintf("%s:%d", c.config.followHost(), c.config.followPort())
 		m["caught_up"] = c.fcup
 		m["caught_up_once"] = c.fcuponce
 	}
@@ -116,10 +116,10 @@ func (c *Controller) cmdServer(msg *server.Message) (res string, err error) {
 	m["mem_alloc"] = mem.Alloc
 	m["heap_size"] = mem.HeapAlloc
 	m["heap_released"] = mem.HeapReleased
-	m["max_heap_size"] = c.config.MaxMemory
+	m["max_heap_size"] = c.config.maxMemory()
 	m["avg_item_size"] = avgsz
 	m["pointer_size"] = (32 << uintptr(uint64(^uintptr(0))>>63)) / 8
-	m["read_only"] = c.config.ReadOnly
+	m["read_only"] = c.config.readOnly()
 
 	switch msg.OutputType {
 	case server.JSON:
@@ -170,9 +170,9 @@ func (c *Controller) writeInfoPersistence(w *bytes.Buffer) {
 }
 
 func (c *Controller) writeInfoStats(w *bytes.Buffer) {
-	fmt.Fprintf(w, "total_connections_received:%d\r\n", c.statsTotalConns)  // Total number of connections accepted by the server
-	fmt.Fprintf(w, "total_commands_processed:%d\r\n", c.statsTotalCommands) // Total number of commands processed by the server
-	fmt.Fprintf(w, "expired_keys:%d\r\n", c.statsExpired)                   // Total number of key expiration events
+	fmt.Fprintf(w, "total_connections_received:%d\r\n", c.statsTotalConns.get())  // Total number of connections accepted by the server
+	fmt.Fprintf(w, "total_commands_processed:%d\r\n", c.statsTotalCommands.get()) // Total number of commands processed by the server
+	fmt.Fprintf(w, "expired_keys:%d\r\n", c.statsExpired.get())                   // Total number of key expiration events
 }
 func (c *Controller) writeInfoReplication(w *bytes.Buffer) {
 	fmt.Fprintf(w, "connected_slaves:%d\r\n", len(c.aofconnM)) // Number of connected slaves
