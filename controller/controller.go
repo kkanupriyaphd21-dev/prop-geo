@@ -58,27 +58,38 @@ func (col *collectionT) Less(item btree.Item, ctx interface{}) bool {
 	return col.Key < item.(*collectionT).Key
 }
 
-type clientConn struct {
-	id     uint64
-	name   string
-	opened time.Time
-	last   time.Time
-	conn   *server.Conn
-}
-
 // Controller is a propgeo controller
 type Controller struct {
+	// static values
+	host    string
+	port    int
+	http    bool
+	started time.Time
+	config  *Config
+	epc     *endpoint.EndpointManager
+
+	// atomics
+	followc                aint // counter increases when follow property changes
+	statsTotalConns        aint // counter for total connections
+	statsTotalCommands     aint // counter for total commands
+	statsExpired           aint // item expiration counter
+	lastShrinkDuration     aint
+	currentShrinkStart     atime
+	stopBackgroundExpiring abool
+	stopWatchingMemory     abool
+	stopWatchingAutoGC     abool
+	outOfMemory            abool
+
+	connsmu sync.RWMutex
+	conns2  map[*server.Conn]*clientConn
+
 	mu        sync.RWMutex
-	host      string
-	port      int
 	f         *os.File
 	qdb       *buntdb.DB // hook queue log
 	qidx      uint64     // hook queue log last idx
 	cols      *btree.BTree
 	aofsz     int
 	dir       string
-	config    *Config
-	followc   uint64 // counter increases when follow property changes
 	follows   map[*bytes.Buffer]bool
 	fcond     *sync.Cond
 	lstack    []*commandDetailsT
@@ -93,24 +104,6 @@ type Controller struct {
 	aofconnM  map[net.Conn]bool
 	expires   map[string]map[string]time.Time
 	exlist    []exitem
-	conns     map[*server.Conn]*clientConn
-	started   time.Time
-	http      bool
-
-	epc *endpoint.EndpointManager
-
-	// counters
-	statsTotalConns    aint
-	statsTotalCommands aint
-	statsExpired       aint
-
-	lastShrinkDuration time.Duration
-	currentShrinkStart time.Time
-
-	stopBackgroundExpiring abool
-	stopWatchingMemory     abool
-	stopWatchingAutoGC     abool
-	outOfMemory            abool
 }
 
 // ListenAndServe starts a new propgeo server
@@ -133,7 +126,7 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener, http 
 		aofconnM: make(map[net.Conn]bool),
 		expires:  make(map[string]map[string]time.Time),
 		started:  time.Now(),
-		conns:    make(map[*server.Conn]*clientConn),
+		conns2:   make(map[*server.Conn]*clientConn),
 		epc:      endpoint.NewEndpointManager(),
 		http:     http,
 	}
@@ -183,16 +176,14 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener, http 
 	}
 	c.fillExpiresList()
 	if c.config.followHost() != "" {
-		go c.follow(c.config.followHost(), c.config.followPort(), c.followc)
+		go c.follow(c.config.followHost(), c.config.followPort(), c.followc.get())
 	}
 	defer func() {
-		c.mu.Lock()
-		c.followc++ // this will force any follow communication to die
-		c.mu.Unlock()
+		c.followc.add(1) // this will force any follow communication to die
 	}()
 	go c.processLives()
-	go c.watchMemory()
-	go c.watchGC()
+	go c.watchOutOfMemory()
+	go c.watchAutoGC()
 	go c.backgroundExpiring()
 	defer func() {
 		c.stopBackgroundExpiring.set(true)
@@ -200,12 +191,12 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener, http 
 		c.stopWatchingAutoGC.set(true)
 	}()
 	handler := func(conn *server.Conn, msg *server.Message, rd *server.AnyReaderWriter, w io.Writer, websocket bool) error {
-		c.mu.Lock()
-		if cc, ok := c.conns[conn]; ok {
-			cc.last = time.Now()
+		c.connsmu.RLock()
+		if cc, ok := c.conns2[conn]; ok {
+			cc.last.set(time.Now())
 		}
+		c.connsmu.RUnlock()
 		c.statsTotalCommands.add(1)
-		c.mu.Unlock()
 		err := c.handleInputCommand(conn, msg, w)
 		if err != nil {
 			if err.Error() == "going live" {
@@ -224,15 +215,12 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener, http 
 			// -h address
 			return false
 		}
-		c.mu.RLock()
 		is := c.config.protectedMode() != "no" && c.config.requirePass() == ""
-		c.mu.RUnlock()
 		return is
 	}
 
-	var clientID uint64
+	var clientID aint
 	opened := func(conn *server.Conn) {
-		c.mu.Lock()
 		if c.config.keepAlive() > 0 {
 			err := conn.SetKeepAlive(
 				time.Duration(c.config.keepAlive()) * time.Second)
@@ -241,47 +229,42 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener, http 
 					conn.RemoteAddr().String())
 			}
 		}
-		clientID++
-		c.conns[conn] = &clientConn{
-			id:     clientID,
-			opened: time.Now(),
-			conn:   conn,
-		}
+
+		cc := &clientConn{}
+		cc.id = clientID.add(1)
+		cc.opened.set(time.Now())
+		cc.conn = conn
+
+		c.connsmu.Lock()
+		c.conns2[conn] = cc
+		c.connsmu.Unlock()
+
 		c.statsTotalConns.add(1)
-		c.mu.Unlock()
 	}
 
 	closed := func(conn *server.Conn) {
-		c.mu.Lock()
-		delete(c.conns, conn)
-		c.mu.Unlock()
+		c.connsmu.Lock()
+		delete(c.conns2, conn)
+		c.connsmu.Unlock()
 	}
 	return server.ListenAndServe(host, port, protected, handler, opened, closed, ln, http)
 }
 
-func (c *Controller) watchGC() {
+func (c *Controller) watchAutoGC() {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
-
 	s := time.Now()
 	for range t.C {
-		c.mu.RLock()
-
 		if c.stopWatchingAutoGC.on() {
-			c.mu.RUnlock()
 			return
 		}
-
-		c.mu.RUnlock()
-
-		if c.config.autoGC() == 0 {
+		autoGC := c.config.autoGC()
+		if autoGC == 0 {
 			continue
 		}
-
-		if time.Now().Sub(s) < time.Second*time.Duration(c.config.autoGC()) {
+		if time.Now().Sub(s) < time.Second*time.Duration(autoGC) {
 			continue
 		}
-
 		var mem1, mem2 runtime.MemStats
 		runtime.ReadMemStats(&mem1)
 		log.Debugf("autogc(before): "+
@@ -290,7 +273,6 @@ func (c *Controller) watchGC() {
 
 		runtime.GC()
 		debug.FreeOSMemory()
-
 		runtime.ReadMemStats(&mem2)
 		log.Debugf("autogc(after): "+
 			"alloc: %v, heap_alloc: %v, heap_released: %v",
@@ -299,24 +281,19 @@ func (c *Controller) watchGC() {
 	}
 }
 
-func (c *Controller) watchMemory() {
+func (c *Controller) watchOutOfMemory() {
 	t := time.NewTicker(time.Second * 2)
 	defer t.Stop()
 	var mem runtime.MemStats
 	for range t.C {
 		func() {
-			c.mu.RLock()
 			if c.stopWatchingMemory.on() {
-				c.mu.RUnlock()
 				return
 			}
 			oom := c.outOfMemory.on()
-			c.mu.RUnlock()
 			if c.config.maxMemory() == 0 {
 				if oom {
-					c.mu.Lock()
 					c.outOfMemory.set(false)
-					c.mu.Unlock()
 				}
 				return
 			}
@@ -324,9 +301,7 @@ func (c *Controller) watchMemory() {
 				runtime.GC()
 			}
 			runtime.ReadMemStats(&mem)
-			c.mu.Lock()
 			c.outOfMemory.set(int(mem.HeapAlloc) > c.config.maxMemory())
-			c.mu.Unlock()
 		}()
 	}
 }
@@ -504,6 +479,10 @@ func (c *Controller) handleInputCommand(conn *server.Conn, msg *server.Message, 
 		// dev operation
 		c.mu.Lock()
 		defer c.mu.Unlock()
+	case "sleep":
+		// dev operation
+		c.mu.RLock()
+		defer c.mu.RUnlock()
 	case "shutdown":
 		// dev operation
 		c.mu.Lock()
@@ -603,6 +582,12 @@ func (c *Controller) command(
 			return
 		}
 		res, err = c.cmdMassInsert(msg)
+	case "sleep":
+		if !core.DevMode {
+			err = fmt.Errorf("unknown command '%s'", msg.Values[0])
+			return
+		}
+		res, err = c.cmdSleep(msg)
 	case "follow":
 		res, err = c.cmdFollow(msg)
 	case "readonly":
