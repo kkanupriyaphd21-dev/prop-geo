@@ -31,7 +31,7 @@ func (err errAOFHook) Error() string {
 var errInvalidAOF = errors.New("invalid aof file")
 
 func (c *Controller) loadAOF() error {
-	fi, err := c.f.Stat()
+	fi, err := c.aof.Stat()
 	if err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func (c *Controller) loadAOF() error {
 			count, float64(d)/float64(time.Second), ps, byteSpeed)
 	}()
 	var msg server.Message
-	rd := bufio.NewReader(c.f)
+	rd := bufio.NewReader(c.aof)
 	for {
 		var nn int
 		ch, err := rd.ReadByte()
@@ -194,7 +194,7 @@ func (c *Controller) writeAOF(value resp.Value, d *commandDetailsT) error {
 	if err != nil {
 		return err
 	}
-	n, err := c.f.Write(data)
+	n, err := c.aof.Write(data)
 	if err != nil {
 		return err
 	}
@@ -342,7 +342,7 @@ func (c *Controller) cmdAOF(msg *server.Message) (res string, err error) {
 	if err != nil || pos < 0 {
 		return "", errInvalidArgument(spos)
 	}
-	f, err := os.Open(c.f.Name())
+	f, err := os.Open(c.aof.Name())
 	if err != nil {
 		return "", err
 	}
@@ -359,7 +359,7 @@ func (c *Controller) cmdAOF(msg *server.Message) (res string, err error) {
 	return "", s
 }
 
-func (c *Controller) liveAOF(pos int64, conn net.Conn, rd *server.AnyReaderWriter, msg *server.Message) error {
+func (c *Controller) liveAOF(pos int64, conn net.Conn, rd *server.PipelineReader, msg *server.Message) error {
 	c.mu.Lock()
 	c.aofconnM[conn] = true
 	c.mu.Unlock()
@@ -375,7 +375,7 @@ func (c *Controller) liveAOF(pos int64, conn net.Conn, rd *server.AnyReaderWrite
 	}
 
 	c.mu.RLock()
-	f, err := os.Open(c.f.Name())
+	f, err := os.Open(c.aof.Name())
 	c.mu.RUnlock()
 	if err != nil {
 		return err
@@ -394,19 +394,21 @@ func (c *Controller) liveAOF(pos int64, conn net.Conn, rd *server.AnyReaderWrite
 			cond.L.Unlock()
 		}()
 		for {
-			v, err := rd.ReadMessage()
+			vs, err := rd.ReadMessages()
 			if err != nil {
 				if err != io.EOF {
 					log.Error(err)
 				}
 				return
 			}
-			switch v.Command {
-			default:
-				log.Error("received a live command that was not QUIT")
-				return
-			case "quit", "":
-				return
+			for _, v := range vs {
+				switch v.Command {
+				default:
+					log.Error("received a live command that was not QUIT")
+					return
+				case "quit", "":
+					return
+				}
 			}
 		}
 	}()
