@@ -1332,7 +1332,7 @@
         "multiple": true
       }
     ],
-    "since": "1.9.2",
+    "since": "1.10.0",
     "group": "scripting"
   },
   "EVALSHA":{
@@ -1360,7 +1360,7 @@
         "multiple": true
       }
     ],
-    "since": "1.9.2",
+    "since": "1.10.0",
     "group": "scripting"
   },
   "EVALRO":{
@@ -1388,12 +1388,12 @@
         "multiple": true
       }
     ],
-    "since": "1.9.2",
+    "since": "1.10.0",
     "group": "scripting"
   },
   "EVALROSHA":{
-    "summary": "Evaluates a read-only Lua script",
-    "complecxity": "Depends on the evaluated script cached on the server by its SHA1 digest",
+    "summary": "Evaluates a read-only Lua script cached on the server by its SHA1 digest",
+    "complecxity": "Depends on the evaluated script",
     "arguments": [
       {
         "name": "script",
@@ -1416,7 +1416,7 @@
         "multiple": true
       }
     ],
-    "since": "1.9.2",
+    "since": "1.10.0",
     "group": "scripting"
   },
   "EVALNA":{
@@ -1444,7 +1444,7 @@
         "multiple": true
       }
     ],
-    "since": "1.9.2",
+    "since": "1.10.0",
     "group": "scripting"
   },
   "EVALNASHA":{
@@ -1472,11 +1472,11 @@
         "multiple": true
       }
     ],
-    "since": "1.9.2",
+    "since": "1.10.0",
     "group": "scripting"
   },
   "SCRIPT EXISTS":{
-    "summary": "Loads the compiled version of a script into the server cache, without executing",
+    "summary": "Returns information about the existence of the scripts in server cache",
     "complexity": "O(N) where N is the number of provided sha1 arguments",
     "arguments": [
       {
@@ -1485,7 +1485,7 @@
         "multiple": true
       }
     ],
-    "since": "1.9.2",
+    "since": "1.10.0",
     "group": "scripting"
   },
   "SCRIPT LOAD":{
@@ -1497,13 +1497,13 @@
         "type": "string"
       }
     ],
-    "since": "1.9.2",
+    "since": "1.10.0",
     "group": "scripting"
   },
   "SCRIPT FLUSH":{
     "summary": "Flushes the server cache of Lua scripts",
     "complexity": "O(1)",
-    "since": "1.9.2",
+    "since": "1.10.0",
     "group": "scripting"
   }
 }
