@@ -132,6 +132,7 @@ fi
 go build -ldflags "$LDFLAGS" -o "$OD/propgeo-server" cmd/propgeo-server/*.go
 go build -ldflags "$LDFLAGS" -o "$OD/propgeo-cli" cmd/propgeo-cli/*.go
 go build -ldflags "$LDFLAGS" -o "$OD/propgeo-benchmark" cmd/propgeo-benchmark/*.go
+go build -ldflags "$LDFLAGS" -o "$OD/propgeo-luamemtest" cmd/propgeo-luamemtest/*.go
 
 # test if requested
 if [ "$1" == "test" ]; then
