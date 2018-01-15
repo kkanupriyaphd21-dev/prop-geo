@@ -51,12 +51,16 @@ func (g SimplePoint) Weight() int {
 
 // MarshalJSON allows the object to be encoded in json.Marshal calls.
 func (g SimplePoint) MarshalJSON() ([]byte, error) {
-	return []byte(g.JSON()), nil
+	return g.appendJSON(nil), nil
+}
+
+func (g SimplePoint) appendJSON(json []byte) []byte {
+	return appendLevel1JSON(json, "Point", Position{X: g.X, Y: g.Y, Z: 0}, nil, false)
 }
 
 // JSON is the json representation of the object. This might not be exactly the same as the original.
 func (g SimplePoint) JSON() string {
-	return level1JSON("Point", Position{X: g.X, Y: g.Y, Z: 0}, nil)
+	return string(g.appendJSON(nil))
 }
 
 // String returns a string representation of the object. This might be JSON or something else.
@@ -87,14 +91,6 @@ func (g SimplePoint) Within(o Object) bool {
 		func(v Polygon) bool {
 			return poly.Point(Position{X: g.X, Y: g.Y, Z: 0}).Inside(polyExteriorHoles(v.Coordinates))
 		},
-		func(v MultiPolygon) bool {
-			for _, c := range v.Coordinates {
-				if !poly.Point(Position{X: g.X, Y: g.Y, Z: 0}).Inside(polyExteriorHoles(c)) {
-					return false
-				}
-			}
-			return true
-		},
 	)
 }
 
@@ -103,14 +99,6 @@ func (g SimplePoint) Intersects(o Object) bool {
 	return intersectsObjectShared(g, o,
 		func(v Polygon) bool {
 			return poly.Point(Position{X: g.X, Y: g.Y, Z: 0}).Intersects(polyExteriorHoles(v.Coordinates))
-		},
-		func(v MultiPolygon) bool {
-			for _, c := range v.Coordinates {
-				if poly.Point(Position{X: g.X, Y: g.Y, Z: 0}).Intersects(polyExteriorHoles(c)) {
-					return true
-				}
-			}
-			return false
 		},
 	)
 }

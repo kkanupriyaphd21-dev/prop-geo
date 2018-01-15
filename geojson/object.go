@@ -1,12 +1,9 @@
 package geojson
 
 import (
-	"bytes"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/propgeo/geojson/poly"
@@ -61,6 +58,8 @@ const nilz = 0
 type Object interface {
 	bboxPtr() *BBox
 	hasPositions() bool
+	appendJSON(dst []byte) []byte
+
 	// WithinBBox detects if the object is fully contained inside a bbox.
 	WithinBBox(bbox BBox) bool
 	// IntersectsBBox detects if the object intersects a bbox.
@@ -91,39 +90,6 @@ type Object interface {
 	IsBBoxDefined() bool
 	// IsGeometry return true if the object is a geojson geometry object. false if it something else.
 	IsGeometry() bool
-}
-
-func writeHeader(buf *bytes.Buffer, objType byte, bbox *BBox, isCordZ bool) {
-	header := objType
-	if bbox != nil {
-		header |= 1 << 4
-		if bbox.Min.Z != nilz || bbox.Max.Z != nilz {
-			header |= 1 << 5
-		}
-	}
-	if isCordZ {
-		header |= 1 << 6
-	}
-	buf.WriteByte(header)
-	if bbox != nil {
-		b := make([]byte, 8)
-		binary.LittleEndian.PutUint64(b, math.Float64bits(bbox.Min.X))
-		buf.Write(b)
-		binary.LittleEndian.PutUint64(b, math.Float64bits(bbox.Min.Y))
-		buf.Write(b)
-		if bbox.Min.Z != nilz || bbox.Max.Z != nilz {
-			binary.LittleEndian.PutUint64(b, math.Float64bits(bbox.Min.Z))
-			buf.Write(b)
-		}
-		binary.LittleEndian.PutUint64(b, math.Float64bits(bbox.Max.X))
-		buf.Write(b)
-		binary.LittleEndian.PutUint64(b, math.Float64bits(bbox.Max.Y))
-		buf.Write(b)
-		if bbox.Min.Z != nilz || bbox.Max.Z != nilz {
-			binary.LittleEndian.PutUint64(b, math.Float64bits(bbox.Max.Z))
-			buf.Write(b)
-		}
-	}
 }
 
 func positionBBox(i int, bbox BBox, ps []Position) (int, BBox) {
@@ -216,10 +182,15 @@ func objectMap(json string, from int) (Object, error) {
 	return o, err
 }
 
-func withinObjectShared(g Object, o Object, pin func(v Polygon) bool, mpin func(v MultiPolygon) bool) bool {
+func withinObjectShared(g Object, o Object, pin func(v Polygon) bool) bool {
 	bbp := o.bboxPtr()
 	if bbp != nil {
-		return g.WithinBBox(*bbp)
+		if !g.WithinBBox(*bbp) {
+			return false
+		}
+		if o.IsBBoxDefined() {
+			return true
+		}
 	}
 	switch v := o.(type) {
 	default:
@@ -234,10 +205,12 @@ func withinObjectShared(g Object, o Object, pin func(v Polygon) bool, mpin func(
 		}
 		return pin(v)
 	case MultiPolygon:
-		if len(v.Coordinates) == 0 {
-			return false
+		for _, coords := range v.Coordinates {
+			if pin(Polygon{Coordinates: coords}) {
+				return true
+			}
 		}
-		return mpin(v)
+		return false
 	case Feature:
 		return g.Within(v.Geometry)
 	case FeatureCollection:
@@ -263,10 +236,15 @@ func withinObjectShared(g Object, o Object, pin func(v Polygon) bool, mpin func(
 	}
 }
 
-func intersectsObjectShared(g Object, o Object, pin func(v Polygon) bool, mpin func(v MultiPolygon) bool) bool {
+func intersectsObjectShared(g Object, o Object, pin func(v Polygon) bool) bool {
 	bbp := o.bboxPtr()
 	if bbp != nil {
-		return g.IntersectsBBox(*bbp)
+		if !g.IntersectsBBox(*bbp) {
+			return false
+		}
+		if o.IsBBoxDefined() {
+			return true
+		}
 	}
 	switch v := o.(type) {
 	default:
@@ -281,10 +259,12 @@ func intersectsObjectShared(g Object, o Object, pin func(v Polygon) bool, mpin f
 		}
 		return pin(v)
 	case MultiPolygon:
-		if len(v.Coordinates) == 0 {
-			return false
+		for _, coords := range v.Coordinates {
+			if pin(Polygon{Coordinates: coords}) {
+				return true
+			}
 		}
-		return mpin(v)
+		return false
 	case Feature:
 		return g.Intersects(v.Geometry)
 	case FeatureCollection:
