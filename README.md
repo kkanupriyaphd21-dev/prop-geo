@@ -5,7 +5,7 @@
 </p>
 <p align="center">
 <a href="https://gitter.im/propgeo/propgeo?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge"><img src="https://badges.gitter.im/Join%20Chat.svg" alt="Gitter"></a>
-<a href="https://github.com/tidwall/propgeo/releases"><img src="https://img.shields.io/badge/version-1.10.1-green.svg?" alt="Version"></a>
+<a href="https://github.com/tidwall/propgeo/releases"><img src="https://img.shields.io/badge/version-1.11.0-green.svg?" alt="Version"></a>
 <a href="https://travis-ci.org/tidwall/propgeo"><img src="https://travis-ci.org/tidwall/propgeo.svg?branch=master" alt="Build Status"></a>
 <a href="https://hub.docker.com/r/propgeo/propgeo"><img src="https://img.shields.io/badge/docker-ready-blue.svg" alt="Docker Ready"></a>
 </p>
@@ -312,7 +312,12 @@ PropGeo uses the [Redis RESP](http://redis.io/topics/protocol) protocol natively
 - Scala: [scala-redis](https://github.com/debasishg/scala-redis)
 - Swift: [Redbird](https://github.com/czechboy0/Redbird)
 
+## Special thanks
+
+[Vladimir Agafonkin](https://github.com/mourner) for the exceptional R-Tree indexing implementation [RBush](https://github.com/mourner/rbush). It gives PropGeo a little extra pep!
+
 ## Contact
+
 Josh Baker [@tidwall](http://twitter.com/tidwall)
 
 ## License
