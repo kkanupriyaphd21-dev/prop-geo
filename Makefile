@@ -4,6 +4,7 @@ clean:
 	rm -f propgeo-server
 	rm -f propgeo-cli
 	rm -f propgeo-benchmark
+	rm -f propgeo-luamemtest
 test:
 	@./build.sh test
 cover:
