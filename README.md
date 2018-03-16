@@ -54,13 +54,6 @@ docker pull propgeo/propgeo
 docker run -p 9851:9851 propgeo/propgeo
 ```
 
-For the latest development version that tracks the Github master branch:
-
-```
-docker pull propgeo/propgeo:edge
-docker run -p 9851:9851 propgeo/propgeo:edge
-```
-
 Visit the [PropGeo hub page](https://hub.docker.com/r/propgeo/propgeo/) for more information.
 
 ### Homebrew (macOS)
@@ -86,7 +79,7 @@ To test:
 $ make test
 ```
 
-## Running 
+### Running 
 For command line options invoke:
 ```
 $ ./propgeo-server -h
