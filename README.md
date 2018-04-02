@@ -23,8 +23,7 @@ PropGeo is an open source (MIT licensed), in-memory geolocation data store, spat
 
 ## Supporting PropGeo
 
-PropGeo is an MIT-licensed open source project.
-It's an independent project with its ongoing development made possible thanks to the support by these awesome [backers](https://github.com/tidwall/propgeo/blob/master/BACKERS.md).
+PropGeo is an independent project with its ongoing development made possible thanks to the support by these awesome [backers](https://github.com/tidwall/propgeo/blob/master/BACKERS.md).
 If you'd like to join them, please consider:
 
 - [Become a backer or sponsor on Patreon](https://www.patreon.com/tidwall).
