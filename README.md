@@ -5,7 +5,7 @@
 </p>
 <p align="center">
 <a href="https://gitter.im/propgeo/propgeo?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge"><img src="https://badges.gitter.im/Join%20Chat.svg" alt="Gitter"></a>
-<a href="https://github.com/tidwall/propgeo/releases"><img src="https://img.shields.io/badge/version-1.11.0-green.svg?" alt="Version"></a>
+<a href="https://github.com/tidwall/propgeo/releases"><img src="https://img.shields.io/badge/version-1.11.1-green.svg?" alt="Version"></a>
 <a href="https://travis-ci.org/tidwall/propgeo"><img src="https://travis-ci.org/tidwall/propgeo.svg?branch=master" alt="Build Status"></a>
 <a href="https://hub.docker.com/r/propgeo/propgeo"><img src="https://img.shields.io/badge/docker-ready-blue.svg" alt="Docker Ready"></a>
 </p>
@@ -20,6 +20,15 @@ PropGeo is an open source (MIT licensed), in-memory geolocation data store, spat
 <a href="http://propgeo.com/topics/geofencing"><img src="/doc/geofence.gif" alt="Geofencing" border="0" width="120" height="120"></a>
 <a href="http://propgeo.com/topics/roaming-geofences"><img src="/doc/roaming.gif" alt="Roaming Geofences" border="0" width="120" height="120"></a>
 </p>
+
+## Supporting PropGeo
+
+PropGeo is an MIT-licensed open source project.
+It's an independent project with its ongoing development made possible thanks to the support by these awesome [backers](https://github.com/tidwall/propgeo/blob/master/BACKERS.md).
+If you'd like to join them, please consider:
+
+- [Become a backer or sponsor on Patreon](https://www.patreon.com/tidwall).
+
 
 ## Features
 
