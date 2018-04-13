@@ -85,6 +85,7 @@ Developer Options:
   --dev                             : enable developer mode
   --webhook-http-consumer-port port : Start a test HTTP webhook server
   --webhook-grpc-consumer-port port : Start a test GRPC webhook server
+
 `,
 		)
 	}
@@ -281,7 +282,7 @@ Developer Options:
   |____   |   _   |   PropGeo %s%s %d bit (%s/%s)
   |       |       |   %sPort: %d, PID: %d
   |____   |   _   | 
-  |       |       |   propgeo.com
+  |       |       |   propgeo.com, patreon.com/tidwall
   |_______|_______| 
 `+"\n", core.Version, gitsha, strconv.IntSize, runtime.GOARCH, runtime.GOOS, hostd, port, os.Getpid())
 	if pidferr != nil {
