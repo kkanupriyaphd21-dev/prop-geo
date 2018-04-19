@@ -1,4 +1,4 @@
-![PropGeo Logo](https://raw.githubusercontent.com/tidwall/propgeo/master/res/logo200.png)
+![PropGeo Logo](https://raw.githubusercontent.com/tidwall/propgeo/master/pkg/assets/logo200.png)
 
 PropGeo is an open source (MIT licensed), in-memory geolocation data store, spatial index, and realtime geofence. It supports a variety of object types including lat/lon points, bounding boxes, XYZ tiles, Geohashes, and GeoJSON. 
 
