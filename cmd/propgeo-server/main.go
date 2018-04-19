@@ -19,10 +19,10 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/tidwall/propgeo/controller"
-	"github.com/tidwall/propgeo/controller/log"
-	"github.com/tidwall/propgeo/core"
-	"github.com/tidwall/propgeo/hservice"
+	"github.com/tidwall/propgeo/pkg/controller"
+	"github.com/tidwall/propgeo/pkg/core"
+	"github.com/tidwall/propgeo/pkg/hservice"
+	"github.com/tidwall/propgeo/pkg/log"
 )
 
 var (
