@@ -5,13 +5,13 @@ VERSION="1.12.0"
 PROTECTED_MODE="no"
 
 # Hardcode some values to the core package
-LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.Version=${VERSION}"
+LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/pkg/core.Version=${VERSION}"
 if [ -d ".git" ]; then
-	LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.GitSHA=$(git rev-parse --short HEAD)"
+	LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/pkg/core.GitSHA=$(git rev-parse --short HEAD)"
 fi
-LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.BuildTime=$(date +%FT%T%z)"
+LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/pkg/core.BuildTime=$(date +%FT%T%z)"
 if [ "$PROTECTED_MODE" == "no" ]; then
-	LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.ProtectedMode=no"
+	LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/pkg/core.ProtectedMode=no"
 fi
 
 if [ "$1" == "update-version" ]; then
@@ -128,6 +128,9 @@ if [ "$NOLINK" != "1" ]; then
     export GOPATH="$TMP/go"
 	cd "$TMP/go/src/github.com/tidwall/propgeo"
 fi
+
+# generate the core package
+pkg/core/gen.sh
 
 # build and store objects into original directory.
 go build -ldflags "$LDFLAGS" -o "$OD/propgeo-server" cmd/propgeo-server/*.go

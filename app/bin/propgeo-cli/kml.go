@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/tidwall/propgeo/geojson"
+	"github.com/tidwall/propgeo/pkg/geojson"
 )
 
 type pointT struct {

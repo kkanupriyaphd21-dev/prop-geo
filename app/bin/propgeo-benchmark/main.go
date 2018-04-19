@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/tidwall/redbench"
-	"github.com/tidwall/propgeo/core"
+	"github.com/tidwall/propgeo/pkg/core"
 )
 
 var (
