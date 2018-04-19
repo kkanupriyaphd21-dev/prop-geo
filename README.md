@@ -1,10 +1,10 @@
 <p align="center">
   <a href="http://propgeo.com"><img 
-    src="/doc/logo1500.png" 
+    src="/res/logo1500.png" 
     width="200" height="200" border="0" alt="PropGeo"></a>
 </p>
 <p align="center">
-<a href="http://propgeo.com/slack"><img src="https://img.shields.io/badge/slack-channel-orange.svg" alt="Slack Channel"></a>
+<a href="https://join.slack.com/t/propgeo/shared_invite/enQtMzQ0OTEwMDUxMzc5LTc0NTJjZmM3YjFhOGZiZGU2NDNjOWEwM2Q5ZWE3MzFiYWZkZDIyN2U2ZmUzZDBmODU0MjI1ZjQ0N2Y1M2I1NTg"><img src="https://img.shields.io/badge/slack-channel-orange.svg" alt="Slack Channel"></a>
 <a href="https://github.com/tidwall/propgeo/releases"><img src="https://img.shields.io/badge/version-1.12.0-green.svg?" alt="Version"></a>
 <a href="https://travis-ci.org/tidwall/propgeo"><img src="https://travis-ci.org/tidwall/propgeo.svg?branch=master" alt="Build Status"></a>
 <a href="https://hub.docker.com/r/propgeo/propgeo"><img src="https://img.shields.io/badge/docker-ready-blue.svg" alt="Docker Ready"></a>
@@ -14,20 +14,12 @@ PropGeo is an open source (MIT licensed), in-memory geolocation data store, spat
 
 <p align="center">
 <i>This README is quick start document. You can find detailed documentation at <a href="http://propgeo.com">http://propgeo.com</a>.</i><br><br>
-<a href="#searching"><img src="/doc/search-nearby.png" alt="Nearby" border="0" width="120" height="120"></a>
-<a href="#searching"><img src="/doc/search-within.png" alt="Within" border="0" width="120" height="120"></a>
-<a href="#searching"><img src="/doc/search-intersects.png" alt="Intersects" border="0" width="120" height="120"></a>
-<a href="http://propgeo.com/topics/geofencing"><img src="/doc/geofence.gif" alt="Geofencing" border="0" width="120" height="120"></a>
-<a href="http://propgeo.com/topics/roaming-geofences"><img src="/doc/roaming.gif" alt="Roaming Geofences" border="0" width="120" height="120"></a>
+<a href="#searching"><img src="/res/search-nearby.png" alt="Nearby" border="0" width="120" height="120"></a>
+<a href="#searching"><img src="/res/search-within.png" alt="Within" border="0" width="120" height="120"></a>
+<a href="#searching"><img src="/res/search-intersects.png" alt="Intersects" border="0" width="120" height="120"></a>
+<a href="http://propgeo.com/topics/geofencing"><img src="/res/geofence.gif" alt="Geofencing" border="0" width="120" height="120"></a>
+<a href="http://propgeo.com/topics/roaming-geofences"><img src="/res/roaming.gif" alt="Roaming Geofences" border="0" width="120" height="120"></a>
 </p>
-
-## Supporting PropGeo
-
-PropGeo is an independent project with its ongoing development made possible thanks to the support by these awesome [backers](https://github.com/tidwall/propgeo/blob/master/BACKERS.md).
-If you'd like to join them, please consider:
-
-- [Become a backer or sponsor on Patreon](https://www.patreon.com/tidwall).
-
 
 ## Features
 
@@ -41,6 +33,7 @@ If you'd like to join them, please consider:
 - Leader / follower [replication](#replication).
 - In-memory database that persists on disk.
 - All coordinates are in [WGS 84 Web Mercator / EPSG:3857](#coordinate-system)
+- Fast R-Tree indexes based on the [RBush](https://github.com/mourner/rbush) library by [Vladimir Agafonkin](https://github.com/mourner)
 
 ## Components
 - `propgeo-server    ` - The server
@@ -149,19 +142,19 @@ To set a field when an object already exists:
 
 PropGeo has support to search for objects and points that are within or intersects other objects. All object types can be searched including Polygons, MultiPolygons, GeometryCollections, etc.
 
-<img src="/doc/search-within.png" width="200" height="200" border="0" alt="Search Within" align="left">
+<img src="/res/search-within.png" width="200" height="200" border="0" alt="Search Within" align="left">
 
 #### Within 
 WITHIN searches a collection for objects that are fully contained inside a specified bounding area.
 <BR CLEAR="ALL">
 
-<img src="/doc/search-intersects.png" width="200" height="200" border="0" alt="Search Intersects" align="left">
+<img src="/res/search-intersects.png" width="200" height="200" border="0" alt="Search Intersects" align="left">
 
 #### Intersects
 INTERSECTS searches a collection for objects that intersect a specified bounding area.
 <BR CLEAR="ALL">
 
-<img src="/doc/search-nearby.png" width="200" height="200" border="0" alt="Search Nearby" align="left">
+<img src="/res/search-nearby.png" width="200" height="200" border="0" alt="Search Nearby" align="left">
 
 #### Nearby
 NEARBY searches a collection for objects that intersect a specified radius.
@@ -176,12 +169,12 @@ NEARBY searches a collection for objects that intersect a specified radius.
 This is very helpful for example; when you have many (perhaps millions) of objects and do not want them all clustered together on a map. Sparse will limit the number of objects returned and provide them evenly distributed so that your map looks clean.<br><br>
 You can choose a value between 1 and 8. The value 1 will result in no more than 4 items. The value 8 will result in no more than 65536. *1=4, 2=16, 3=64, 4=256, 5=1024, 6=4098, 7=16384, 8=65536.*<br><br>
 <table>
-<td>No Sparsing<img src="/doc/sparse-none.png" width="100" height="100" border="0" alt="Search Within"></td>
-<td>Sparse 1<img src="/doc/sparse-1.png" width="100" height="100" border="0" alt="Search Within"></td>
-<td>Sparse 2<img src="/doc/sparse-2.png" width="100" height="100" border="0" alt="Search Within"></td>
-<td>Sparse 3<img src="/doc/sparse-3.png" width="100" height="100" border="0" alt="Search Within"></td>
-<td>Sparse 4<img src="/doc/sparse-4.png" width="100" height="100" border="0" alt="Search Within"></td>
-<td>Sparse 5<img src="/doc/sparse-5.png" width="100" height="100" border="0" alt="Search Within"></td>
+<td>No Sparsing<img src="/res/sparse-none.png" width="100" height="100" border="0" alt="Search Within"></td>
+<td>Sparse 1<img src="/res/sparse-1.png" width="100" height="100" border="0" alt="Search Within"></td>
+<td>Sparse 2<img src="/res/sparse-2.png" width="100" height="100" border="0" alt="Search Within"></td>
+<td>Sparse 3<img src="/res/sparse-3.png" width="100" height="100" border="0" alt="Search Within"></td>
+<td>Sparse 4<img src="/res/sparse-4.png" width="100" height="100" border="0" alt="Search Within"></td>
+<td>Sparse 5<img src="/res/sparse-5.png" width="100" height="100" border="0" alt="Search Within"></td>
 </table>
 *Please note that the higher the sparse value, the slower the performance. Also, LIMIT and CURSOR are not available when using SPARSE.* 
 
@@ -198,7 +191,7 @@ You can choose a value between 1 and 8. The value 1 will result in no more than 
 
 ## Geofencing
 
-<img src="/doc/geofence.gif" width="200" height="200" border="0" alt="Geofence animation" align="left">
+<img src="/res/geofence.gif" width="200" height="200" border="0" alt="Geofence animation" align="left">
 A <a href="https://en.wikipedia.org/wiki/Geo-fence">geofence</a> is a virtual boundary that can detect when an object enters or exits the area. This boundary can be a radius, bounding box, or a polygon. PropGeo can turn any standard search into a geofence monitor by adding the FENCE keyword to the search. 
 
 *PropGeo also allows for [Webhooks](http://propgeo.com/commands/sethook) to be assigned to Geofences.*
@@ -335,10 +328,6 @@ PropGeo uses the [Redis RESP](http://redis.io/topics/protocol) protocol natively
 - Rust: [redis-rs](https://github.com/mitsuhiko/redis-rs)
 - Scala: [scala-redis](https://github.com/debasishg/scala-redis)
 - Swift: [Redbird](https://github.com/czechboy0/Redbird)
-
-## Special thanks
-
-[Vladimir Agafonkin](https://github.com/mourner) for the exceptional R-Tree indexing implementation [RBush](https://github.com/mourner/rbush). It gives PropGeo a little extra pep!
 
 ## Contact
 
