@@ -18,5 +18,4 @@ uninstall:
 	rm -f /usr/local/bin/propgeo-cli
 	rm -f /usr/local/bin/propgeo-benchmark
 package:
-package:
 	@./build.sh package
