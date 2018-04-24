@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-VERSION="1.12.0"
+VERSION=$(git describe --tags | sed 's/-/\n/g' | head -n 1)
 PROTECTED_MODE="no"
 
 # Hardcode some values to the core package
@@ -120,7 +120,6 @@ function rmtemp {
 }
 trap rmtemp EXIT
 
-
 if [ "$NOLINK" != "1" ]; then
     # symlink root to isolated directory
 	mkdir -p "$TMP/go/src/github.com/tidwall"
@@ -133,10 +132,10 @@ fi
 pkg/core/gen.sh
 
 # build and store objects into original directory.
-go build -ldflags "$LDFLAGS" -o "$OD/propgeo-server" cmd/propgeo-server/*.go
-go build -ldflags "$LDFLAGS" -o "$OD/propgeo-cli" cmd/propgeo-cli/*.go
-go build -ldflags "$LDFLAGS" -o "$OD/propgeo-benchmark" cmd/propgeo-benchmark/*.go
-go build -ldflags "$LDFLAGS" -o "$OD/propgeo-luamemtest" cmd/propgeo-luamemtest/*.go
+CGO_ENABLED=0 go build -ldflags "$LDFLAGS -extldflags '-static'" -o "$OD/propgeo-server" cmd/propgeo-server/*.go
+CGO_ENABLED=0 go build -ldflags "$LDFLAGS -extldflags '-static'" -o "$OD/propgeo-cli" cmd/propgeo-cli/*.go
+CGO_ENABLED=0 go build -ldflags "$LDFLAGS -extldflags '-static'" -o "$OD/propgeo-benchmark" cmd/propgeo-benchmark/*.go
+CGO_ENABLED=0 go build -ldflags "$LDFLAGS -extldflags '-static'" -o "$OD/propgeo-luamemtest" cmd/propgeo-luamemtest/*.go
 
 # test if requested
 if [ "$1" == "test" ]; then
