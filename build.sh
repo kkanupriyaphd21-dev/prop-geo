@@ -1,7 +1,10 @@
 #!/bin/bash
 set -e
 
-VERSION=$(git describe --tags | sed 's/-/\n/g' | head -n 1)
+cd $(dirname "${BASH_SOURCE[0]}")
+OD="$(pwd)"
+
+VERSION=1.12.1
 PROTECTED_MODE="no"
 
 # Hardcode some values to the core package
@@ -71,11 +74,6 @@ if [ "$GOVERS" != "devel" ]; then
 		  exit 1
 	fi
 fi
-
-export GO15VENDOREXPERIMENT=1
-
-cd $(dirname "${BASH_SOURCE[0]}")
-OD="$(pwd)"
 
 package(){
 	echo Packaging $1 Binary

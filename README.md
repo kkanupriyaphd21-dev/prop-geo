@@ -5,7 +5,7 @@
 </p>
 <p align="center">
 <a href="https://join.slack.com/t/propgeo/shared_invite/enQtMzQ0OTEwMDUxMzc5LTc0NTJjZmM3YjFhOGZiZGU2NDNjOWEwM2Q5ZWE3MzFiYWZkZDIyN2U2ZmUzZDBmODU0MjI1ZjQ0N2Y1M2I1NTg"><img src="https://img.shields.io/badge/slack-channel-orange.svg" alt="Slack Channel"></a>
-<a href="https://github.com/tidwall/propgeo/releases"><img src="https://img.shields.io/badge/version-1.12.0-green.svg?" alt="Version"></a>
+<a href="https://github.com/tidwall/propgeo/releases"><img src="https://img.shields.io/badge/version-1.12.1-green.svg?" alt="Version"></a>
 <a href="https://travis-ci.org/tidwall/propgeo"><img src="https://travis-ci.org/tidwall/propgeo.svg?branch=master" alt="Build Status"></a>
 <a href="https://hub.docker.com/r/propgeo/propgeo"><img src="https://img.shields.io/badge/docker-ready-blue.svg" alt="Docker Ready"></a>
 </p>
@@ -315,7 +315,7 @@ PropGeo uses the [Redis RESP](http://redis.io/topics/protocol) protocol natively
 - Common Lisp: [CL-Redis](https://github.com/vseloved/cl-redis)
 - Erlang: [Eredis](https://github.com/wooga/eredis)
 - Go: [go-redis](https://github.com/go-redis/redis) ([example code](https://github.com/tidwall/propgeo/wiki/Go-example-(go-redis)))
-- Go: [redigo](https://github.com/garyburd/redigo) ([example code](https://github.com/tidwall/propgeo/wiki/Go-example-(redigo)))
+- Go: [redigo](https://github.com/gomodule/redigo) ([example code](https://github.com/tidwall/propgeo/wiki/Go-example-(redigo)))
 - Haskell: [hedis](https://github.com/informatikr/hedis)
 - Java: [lettuce](https://github.com/mp911de/lettuce) ([example code](https://github.com/tidwall/propgeo/wiki/Java-example-(lettuce)))
 - Node.js: [node-propgeo](https://github.com/phulst/node-propgeo) ([example code](https://github.com/tidwall/propgeo/wiki/Node.js-example-(node-propgeo)))
