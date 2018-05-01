@@ -1,7 +1,7 @@
 FROM alpine:3.4
 
-ADD ./propgeo-server /usr/local/bin
-ADD ./propgeo-cli /usr/local/bin
+ADD propgeo-server /usr/local/bin
+ADD propgeo-cli /usr/local/bin
 
 RUN addgroup -S propgeo && \
     adduser -S -G propgeo propgeo && \
