@@ -1,6 +1,8 @@
 package geojson
 
-import "github.com/tidwall/propgeo/pkg/geojson/geohash"
+import (
+	"github.com/tidwall/propgeo/pkg/geojson/geohash"
+)
 
 // MultiPolygon is a geojson object with the type "MultiPolygon"
 type MultiPolygon struct {
@@ -153,7 +155,7 @@ func (g MultiPolygon) Within(o Object) bool {
 			if len(g.Coordinates) == 0 {
 				return false
 			}
-			if !v.Within(o) {
+			if !v.Within(g) {
 				return false
 			}
 			return true
@@ -181,7 +183,7 @@ func (g MultiPolygon) Intersects(o Object) bool {
 			if len(g.Coordinates) == 0 {
 				return false
 			}
-			if v.Intersects(o) {
+			if v.Intersects(g) {
 				return true
 			}
 			return false
@@ -212,17 +214,4 @@ func (g MultiPolygon) IsBBoxDefined() bool {
 // IsGeometry return true if the object is a geojson geometry object. false if it something else.
 func (g MultiPolygon) IsGeometry() bool {
 	return true
-}
-
-// Clip returns the object obtained by clipping this object by a bbox.
-func (g MultiPolygon) Clipped(bbox BBox) Object {
-	var new_coordinates [][][]Position
-
-	for _, polygon := range g.polygons {
-		clippedPolygon, _ := polygon.Clipped(bbox).(Polygon)
-		new_coordinates = append(new_coordinates, clippedPolygon.Coordinates)
-	}
-
-	res, _ := fillMultiPolygon(new_coordinates, nil, nil)
-	return res
 }

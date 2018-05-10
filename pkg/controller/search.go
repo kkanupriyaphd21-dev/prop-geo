@@ -100,10 +100,6 @@ func (c *Controller) cmdSearchArgs(cmd string, vs []resp.Value, types []string) 
 			return
 		}
 
-		if s.clip {
-			err = errInvalidArgument("cannnot clip with point")
-		}
-
 		umeters := true
 		if vs, smeters, ok = tokenval(vs); !ok || smeters == "" {
 			umeters = false
@@ -138,10 +134,6 @@ func (c *Controller) cmdSearchArgs(cmd string, vs []resp.Value, types []string) 
 			}
 		}
 	case "circle":
-		if s.clip {
-			err = errInvalidArgument("cannnot clip with circle")
-		}
-
 		var slat, slon, smeters string
 		if vs, slat, ok = tokenval(vs); !ok || slat == "" {
 			err = errInvalidNumberOfArguments
@@ -173,10 +165,6 @@ func (c *Controller) cmdSearchArgs(cmd string, vs []resp.Value, types []string) 
 			return
 		}
 	case "object":
-		if s.clip {
-			err = errInvalidArgument("cannnot clip with object")
-		}
-
 		var obj string
 		if vs, obj, ok = tokenval(vs); !ok || obj == "" {
 			err = errInvalidNumberOfArguments
@@ -270,9 +258,6 @@ func (c *Controller) cmdSearchArgs(cmd string, vs []resp.Value, types []string) 
 		}
 		s.minLat, s.minLon, s.maxLat, s.maxLon = bing.TileXYToBounds(x, y, z)
 	case "get":
-		if s.clip {
-			err = errInvalidArgument("cannnot clip with get")
-		}
 		var key, id string
 		if vs, key, ok = tokenval(vs); !ok || key == "" {
 			err = errInvalidNumberOfArguments
@@ -524,8 +509,7 @@ func (c *Controller) cmdWithinOrIntersects(cmd string, msg *server.Message) (res
 				s.minLat, s.minLon, s.maxLat, s.maxLon,
 				s.lat, s.lon, s.meters,
 				minZ, maxZ,
-				s.clip,
-				func(id string, o geojson.Object, fields []float64, clipbox geojson.BBox) bool {
+				func(id string, o geojson.Object, fields []float64) bool {
 					if c.hasExpired(s.key, id) {
 						return true
 					}
@@ -534,8 +518,6 @@ func (c *Controller) cmdWithinOrIntersects(cmd string, msg *server.Message) (res
 						o:      o,
 						fields: fields,
 						noLock: true,
-						clip:   s.clip,
-						clipbox: clipbox,
 					})
 				},
 			)

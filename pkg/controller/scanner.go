@@ -65,8 +65,6 @@ type ScanWriterParams struct {
 	distance        float64
 	noLock          bool
 	ignoreGlobMatch bool
-	clip            bool
-	clipbox         geojson.BBox
 }
 
 func (c *Controller) newScanWriter(
@@ -343,9 +341,6 @@ func (sw *scanWriter) writeObject(opts ScanWriterParams) bool {
 	}
 	if sw.output == outputCount {
 		return sw.count < sw.limit
-	}
-	if opts.clip {
-		opts.o = opts.o.Clipped(opts.clipbox)
 	}
 	switch sw.msg.OutputType {
 	case server.JSON:

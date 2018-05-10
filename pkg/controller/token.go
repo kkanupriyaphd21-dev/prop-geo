@@ -245,7 +245,6 @@ type searchScanBaseTokens struct {
 	usparse   bool
 	sparse    uint8
 	desc      bool
-	clip      bool
 }
 
 func (c *Controller) parseSearchScanBaseTokens(cmd string, vs []resp.Value) (vsout []resp.Value, t searchScanBaseTokens, err error) {
@@ -551,14 +550,6 @@ func (c *Controller) parseSearchScanBaseTokens(cmd string, vs []resp.Value) (vso
 					err = errInvalidNumberOfArguments
 					return
 				}
-				continue
-			} else if (wtok[0] == 'C' || wtok[0] == 'c') && strings.ToLower(wtok) == "clip" {
-				vs = nvs
-				if t.clip {
-					err = errDuplicateArgument(strings.ToUpper(wtok))
-					return
-				}
-				t.clip = true
 				continue
 			}
 		}

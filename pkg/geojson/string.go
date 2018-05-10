@@ -73,11 +73,6 @@ func (s String) IsGeometry() bool {
 	return false
 }
 
-// Clip returns the object obtained by clipping this object by a bbox.
-func (s String) Clipped(bbox BBox) Object {
-	return s
-}
-
 // Bytes is the bytes representation of the object.
 func (s String) Bytes() []byte {
 	return []byte(s.String())
