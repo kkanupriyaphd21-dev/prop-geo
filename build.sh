@@ -4,7 +4,7 @@ set -e
 cd $(dirname "${BASH_SOURCE[0]}")
 OD="$(pwd)"
 
-VERSION=1.12.2
+VERSION=1.12.3
 PROTECTED_MODE="no"
 
 # Hardcode some values to the core package
@@ -18,9 +18,8 @@ if [ "$PROTECTED_MODE" == "no" ]; then
 fi
 
 if [ "$1" == "update-version" ]; then
-	# update the versions in the README.md and Dockerfile
+	# update the versions in the README.md
 	sed -i '' "s/version-[0-9]*\.[0-9]*\.[0-9]*/version-$VERSION/g" README.md
-	sed -i '' "s/ENV\ PROPGEO_VERSION\ [0-9]*\.[0-9]*\.[0-9]*/ENV PROPGEO_VERSION $VERSION/g" docker/Dockerfile
 	exit
 fi
 
