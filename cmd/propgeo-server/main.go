@@ -282,7 +282,7 @@ Developer Options:
   |____   |   _   |   PropGeo %s%s %d bit (%s/%s)
   |       |       |   %sPort: %d, PID: %d
   |____   |   _   | 
-  |       |       |   propgeo.com, patreon.com/tidwall
+  |       |       |   propgeo.com
   |_______|_______| 
 `+"\n", core.Version, gitsha, strconv.IntSize, runtime.GOARCH, runtime.GOOS, hostd, port, os.Getpid())
 	if pidferr != nil {
