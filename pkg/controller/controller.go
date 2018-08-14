@@ -22,6 +22,7 @@ import (
 	"github.com/tidwall/propgeo/pkg/collection"
 	"github.com/tidwall/propgeo/pkg/core"
 	"github.com/tidwall/propgeo/pkg/endpoint"
+	"github.com/tidwall/propgeo/pkg/expire"
 	"github.com/tidwall/propgeo/pkg/geojson"
 	"github.com/tidwall/propgeo/pkg/log"
 	"github.com/tidwall/propgeo/pkg/server"
@@ -113,6 +114,7 @@ type Controller struct {
 	luapool    *lStatePool
 
 	pubsub *pubsub
+	hookex expire.List
 }
 
 // ListenAndServe starts a new propgeo server
@@ -142,6 +144,12 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener, http 
 		conns:    make(map[*server.Conn]*clientConn),
 		http:     http,
 		pubsub:   newPubsub(),
+	}
+	c.hookex.Expired = func(item expire.Item) {
+		switch v := item.(type) {
+		case *Hook:
+			c.possiblyExpireHook(v)
+		}
 	}
 	c.epc = endpoint.NewManager(c)
 	c.luascripts = c.NewScriptMap()
