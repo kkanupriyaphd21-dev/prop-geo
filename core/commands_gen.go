@@ -840,7 +840,7 @@ var commandsJSON = `{
     "group": "search"
   },
   "WITHIN": {
-    "summary": "Searches for ids that are nearby a point",
+    "summary": "Searches for ids that completely within the area",
     "complexity": "O(log(N)) where N is the number of ids in the area",
     "arguments":[
       {
@@ -999,6 +999,23 @@ var commandsJSON = `{
               {
                 "name": "geojson",
                 "type": "geojson"
+              }
+            ]
+          },
+          {
+            "name": "CIRCLE",
+            "arguments": [
+              {
+                "name": "lat",
+                "type": "double"
+              },
+              {
+                "name": "lon",
+                "type": "double"
+              },
+              {
+                "name": "meters",
+                "type": "double"
               }
             ]
           },
@@ -1044,7 +1061,7 @@ var commandsJSON = `{
     "group": "search"
   },
   "INTERSECTS": {
-    "summary": "Searches for ids that are nearby a point",
+    "summary": "Searches for ids that intersect an area",
     "complexity": "O(log(N)) where N is the number of ids in the area",
     "arguments":[
       {
@@ -1105,6 +1122,12 @@ var commandsJSON = `{
         "optional": true,
         "multiple": true,
         "variadic": true
+      },
+      {
+        "command": "CLIP",
+        "name": [],
+        "type": [],
+        "optional": true
       },
       {
         "command": "NOFIELDS",
@@ -1203,6 +1226,23 @@ var commandsJSON = `{
               {
                 "name": "geojson",
                 "type": "geojson"
+              }
+            ]
+          },
+          {
+            "name": "CIRCLE",
+            "arguments": [
+              {
+                "name": "lat",
+                "type": "double"
+              },
+              {
+                "name": "lon",
+                "type": "double"
+              },
+              {
+                "name": "meters",
+                "type": "double"
               }
             ]
           },
@@ -1409,7 +1449,14 @@ var commandsJSON = `{
         "name": ["name", "value"],
         "type": ["string", "string"],
         "optional": true,
-		"multiple": true
+		    "multiple": true
+      },
+      {
+        "command": "EX",
+        "name": ["seconds"],
+        "type": ["double"],
+        "optional": true,
+        "multiple": false
       },
       {
         "enum": ["NEARBY", "WITHIN", "INTERSECTS"]
@@ -1474,6 +1521,113 @@ var commandsJSON = `{
     ],
     "group": "webhook"
   },
+
+  "SETCHAN": {
+    "summary": "Creates a pubsub channel which points to geofenced search",
+    "arguments": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "command": "META",
+        "name": ["name", "value"],
+        "type": ["string", "string"],
+        "optional": true,
+		    "multiple": true
+      },
+      {
+        "command": "EX",
+        "name": ["seconds"],
+        "type": ["double"],
+        "optional": true,
+        "multiple": false
+      },
+      {
+        "enum": ["NEARBY", "WITHIN", "INTERSECTS"]
+      },
+      {
+        "name": "key",
+        "type": "string"
+      },
+      {
+        "command": "FENCE",
+        "name": [],
+        "type": []
+      },
+      {
+        "command": "DETECT",
+        "name": ["what"],
+        "type": ["string"],
+        "optional": true
+      },
+      {
+        "command": "COMMANDS",
+        "name": ["which"],
+        "type": ["string"],
+        "optional": true
+      },
+      {
+        "name": "param",
+        "type": "string",
+        "variadic": true
+      }
+
+    ],
+    "group": "pubsub"
+  },
+  "DELCHAN": {
+    "summary": "Removes a channel",
+    "arguments": [
+      {
+        "name": "name",
+        "type": "string"
+      }
+    ],
+    "group": "pubsub"
+  },
+  "CHANS": {
+    "summary": "Finds all channels matching a pattern",
+    "arguments":[
+      {
+        "name": "pattern",
+        "type": "pattern"
+      }
+    ],
+    "group": "pubsub"
+  },
+  "PDELCHAN": {
+    "summary": "Removes all channels matching a pattern",
+    "arguments":[
+      {
+        "name": "pattern",
+        "type": "pattern"
+      }
+    ],
+    "group": "pubsub"
+  },
+  "SUBSCRIBE": {
+    "summary": "Subscribe to a geofence channel",
+    "arguments":[
+      {
+        "name": "channel",
+        "type": "string",
+        "variadic": true
+      }
+    ],
+    "group": "pubsub"
+  },
+  "PSUBSCRIBE": {
+    "summary": "Subscribes the client to the given patterns",
+    "arguments":[
+      {
+        "name": "pattern",
+        "type": "pattern",
+        "variadic": true
+      }
+    ],
+    "group": "pubsub"
+  },
   "PDEL": {
     "summary": "Removes all objects matching a pattern",
     "arguments":[
@@ -1534,10 +1688,16 @@ var commandsJSON = `{
         "type": "string"
       },
       {
-        "command": "RAW",
         "name": [],
-        "type": [],
-        "optional": true
+        "optional": true,
+        "enumargs": [
+          {
+            "name": "RAW"
+          },
+          {
+            "name": "STR"
+          }
+        ]
       }
     ],
     "group": "keys"

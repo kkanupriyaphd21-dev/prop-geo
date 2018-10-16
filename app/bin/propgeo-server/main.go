@@ -15,14 +15,12 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/tidwall/propgeo/core"
+	"github.com/tidwall/propgeo/internal/controller"
+	"github.com/tidwall/propgeo/internal/hservice"
+	"github.com/tidwall/propgeo/internal/log"
 	"golang.org/x/net/context"
-
 	"google.golang.org/grpc"
-
-	"github.com/tidwall/propgeo/pkg/controller"
-	"github.com/tidwall/propgeo/pkg/core"
-	"github.com/tidwall/propgeo/pkg/hservice"
-	"github.com/tidwall/propgeo/pkg/log"
 )
 
 var (
