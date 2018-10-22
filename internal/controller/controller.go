@@ -12,16 +12,18 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/tidwall/btree"
 	"github.com/tidwall/buntdb"
 	"github.com/tidwall/geojson"
+	"github.com/tidwall/geojson/geometry"
 	"github.com/tidwall/resp"
 	"github.com/tidwall/propgeo/core"
 	"github.com/tidwall/propgeo/internal/collection"
+	"github.com/tidwall/propgeo/internal/ds"
 	"github.com/tidwall/propgeo/internal/endpoint"
 	"github.com/tidwall/propgeo/internal/expire"
 	"github.com/tidwall/propgeo/internal/log"
@@ -33,11 +35,6 @@ var errOOM = errors.New("OOM command not allowed when used memory > 'maxmemory'"
 const goingLive = "going live"
 
 const hookLogPrefix = "hook:log:"
-
-type collectionT struct {
-	Key        string
-	Collection *collection.Collection
-}
 
 type commandDetailsT struct {
 	command   string
@@ -57,10 +54,6 @@ type commandDetailsT struct {
 	children []*commandDetailsT // for multi actions such as "PDEL"
 }
 
-func (col *collectionT) Less(item btree.Item, ctx interface{}) bool {
-	return col.Key < item.(*collectionT).Key
-}
-
 // Controller is a propgeo controller
 type Controller struct {
 	// static values
@@ -71,6 +64,9 @@ type Controller struct {
 	started time.Time
 	config  *Config
 	epc     *endpoint.Manager
+
+	// env opts
+	geomParseOpts geojson.ParseOptions
 
 	// atomics
 	followc                aint // counter increases when follow property changes
@@ -95,7 +91,7 @@ type Controller struct {
 	aofsz   int                             // active size of the aof file
 	qdb     *buntdb.DB                      // hook queue log
 	qidx    uint64                          // hook queue log last idx
-	cols    *btree.BTree                    // data collections
+	cols    ds.BTree                        // data collections
 	expires map[string]map[string]time.Time // synced with cols
 
 	follows    map[*bytes.Buffer]bool
@@ -136,7 +132,6 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener, http 
 		host:     host,
 		port:     port,
 		dir:      dir,
-		cols:     btree.New(16, 0),
 		follows:  make(map[*bytes.Buffer]bool),
 		fcond:    sync.NewCond(&sync.Mutex{}),
 		lives:    make(map[*liveBuffer]bool),
@@ -150,6 +145,7 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener, http 
 		http:     http,
 		pubsub:   newPubsub(),
 	}
+
 	c.hookex.Expired = func(item expire.Item) {
 		switch v := item.(type) {
 		case *Hook:
@@ -169,6 +165,44 @@ func ListenAndServeEx(host string, port int, dir string, ln *net.Listener, http 
 	if err != nil {
 		return err
 	}
+
+	c.geomParseOpts = *geojson.DefaultParseOptions
+	n, err := strconv.ParseUint(os.Getenv("T38IDXGEOM"), 10, 32)
+	if err == nil {
+		c.geomParseOpts.IndexGeometry = int(n)
+	}
+	n, err = strconv.ParseUint(os.Getenv("T38IDXMULTI"), 10, 32)
+	if err == nil {
+		c.geomParseOpts.IndexChildren = int(n)
+	}
+	indexKind := os.Getenv("T38IDXGEOMKIND")
+	switch indexKind {
+	default:
+		log.Errorf("Unknown index kind: %s", indexKind)
+	case "":
+	case "None":
+		c.geomParseOpts.IndexGeometryKind = geometry.None
+	case "RTree":
+		c.geomParseOpts.IndexGeometryKind = geometry.RTree
+	case "RTreeCompressed":
+		c.geomParseOpts.IndexGeometryKind = geometry.RTreeCompressed
+	case "QuadTree":
+		c.geomParseOpts.IndexGeometryKind = geometry.QuadTree
+	case "QuadTreeCompressed":
+		c.geomParseOpts.IndexGeometryKind = geometry.QuadTreeCompressed
+	}
+	if c.geomParseOpts.IndexGeometryKind == geometry.None {
+		log.Debugf("Geom indexing: %s",
+			c.geomParseOpts.IndexGeometryKind,
+		)
+	} else {
+		log.Debugf("Geom indexing: %s (%d points)",
+			c.geomParseOpts.IndexGeometryKind,
+			c.geomParseOpts.IndexGeometry,
+		)
+	}
+	log.Debugf("Multi indexing: RTree (%d points)", c.geomParseOpts.IndexChildren)
+
 	// load the queue before the aof
 	qdb, err := buntdb.Open(core.QueueFileName)
 	if err != nil {
@@ -353,30 +387,29 @@ func (c *Controller) watchLuaStatePool() {
 }
 
 func (c *Controller) setCol(key string, col *collection.Collection) {
-	c.cols.ReplaceOrInsert(&collectionT{Key: key, Collection: col})
+	c.cols.Set(key, col)
 }
 
 func (c *Controller) getCol(key string) *collection.Collection {
-	item := c.cols.Get(&collectionT{Key: key})
-	if item == nil {
-		return nil
+	if value, ok := c.cols.Get(key); ok {
+		return value.(*collection.Collection)
 	}
-	return item.(*collectionT).Collection
+	return nil
 }
 
-func (c *Controller) scanGreaterOrEqual(key string, iterator func(key string, col *collection.Collection) bool) {
-	c.cols.AscendGreaterOrEqual(&collectionT{Key: key}, func(item btree.Item) bool {
-		col := item.(*collectionT)
-		return iterator(col.Key, col.Collection)
+func (c *Controller) scanGreaterOrEqual(
+	key string, iterator func(key string, col *collection.Collection) bool,
+) {
+	c.cols.Ascend(key, func(ikey string, ivalue interface{}) bool {
+		return iterator(ikey, ivalue.(*collection.Collection))
 	})
 }
 
 func (c *Controller) deleteCol(key string) *collection.Collection {
-	i := c.cols.Delete(&collectionT{Key: key})
-	if i == nil {
-		return nil
+	if prev, ok := c.cols.Delete(key); ok {
+		return prev.(*collection.Collection)
 	}
-	return i.(*collectionT).Collection
+	return nil
 }
 
 func isReservedFieldName(field string) bool {
@@ -625,7 +658,7 @@ func randomKey(n int) string {
 
 func (c *Controller) reset() {
 	c.aofsz = 0
-	c.cols = btree.New(16, 0)
+	c.cols = ds.BTree{}
 	c.exlistmu.Lock()
 	c.exlist = nil
 	c.exlistmu.Unlock()
