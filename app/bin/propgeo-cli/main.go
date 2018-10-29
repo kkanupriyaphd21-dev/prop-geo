@@ -16,8 +16,8 @@ import (
 	"github.com/peterh/liner"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/resp"
+	"github.com/tidwall/propgeo/cmd/propgeo-cli/internal/client"
 	"github.com/tidwall/propgeo/core"
-	"github.com/tidwall/propgeo/internal/client"
 )
 
 func userHomeDir() string {

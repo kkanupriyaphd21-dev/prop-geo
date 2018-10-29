@@ -18,9 +18,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/garyburd/redigo/redis"
+	"github.com/gomodule/redigo/redis"
 	"github.com/tidwall/gjson"
-	"github.com/tidwall/propgeo/controller"
+	"github.com/tidwall/propgeo/internal/server"
 )
 
 const propgeoPort = 9191
@@ -31,7 +31,6 @@ var propgeoAddr string
 var httpAddr string
 
 var wd string
-var server string
 
 var minX float64
 var minY float64
@@ -101,7 +100,7 @@ func main() {
 
 func startPropGeoServer() {
 	log.Println("start propgeo server")
-	err := controller.ListenAndServe("localhost", propgeoPort, "data")
+	err := server.Serve("localhost", propgeoPort, "data", false)
 	if err != nil {
 		log.Fatal(err)
 	}
