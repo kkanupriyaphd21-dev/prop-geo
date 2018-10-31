@@ -371,14 +371,9 @@ func (server *Server) cmdNearby(msg *Message) (res resp.Value, err error) {
 	if sw.col != nil {
 		var matched uint32
 		iter := func(id string, o geojson.Object, fields []float64, dist *float64) bool {
-			// Calculate distance if we need to
 			distance := 0.0
 			if s.distance {
-				if dist != nil {
-					distance = *dist
-				} else {
-					distance = o.Distance(s.obj)
-				}
+				distance = *dist
 			}
 			return sw.writeObject(ScanWriterParams{
 				id:              id,
@@ -423,8 +418,16 @@ func (server *Server) nearestNeighbors(
 		if !match {
 			return true
 		}
-		dist := o.Distance(target)
-		if target.Meters() > 0 && dist > target.Meters() {
+		var dist, maxDist float64
+		if s.distance {
+			dist = o.Distance(target)
+			maxDist = target.Meters()
+		} else {
+			// don't need actual distances, use haversine as proxy for sorting
+			dist = target.HaversineTo(o.Center())
+			maxDist = target.Haversine()
+		}
+		if maxDist > 0 && dist > maxDist {
 			return false
 		}
 		items = append(items, iterItem{id: id, o: o, fields: fields, dist: dist})
