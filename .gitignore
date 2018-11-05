@@ -1,6 +1,7 @@
 .DS_Store
 propgeo-*
 !cmd/propgeo-*
+*.test
 data*/
 coverage.out
 packages/
