@@ -299,10 +299,10 @@ func extendRoamMessage(
 			}
 			g := glob.Parse(pattern, false)
 			if g.Limits[0] == "" && g.Limits[1] == "" {
-				col.Scan(false, iterator)
+				col.Scan(false, nil, iterator)
 			} else {
 				col.ScanRange(g.Limits[0], g.Limits[1],
-					false, iterator)
+					false, nil, iterator)
 			}
 		}
 		nmsg = append(nmsg, ']')
@@ -364,7 +364,7 @@ func fenceMatchRoam(
 	prevNearbys := fence.roam.nearbys[tid]
 	var newNearbys map[string]bool
 
-	col.Intersects(obj, 0, func(
+	col.Intersects(obj, 0, nil, func(
 		id string, obj2 geojson.Object, fields []float64,
 	) bool {
 		if c.hasExpired(fence.roam.key, id) {

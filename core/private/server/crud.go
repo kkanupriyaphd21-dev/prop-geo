@@ -372,9 +372,9 @@ func (server *Server) cmdPdel(msg *Message) (res resp.Value, d commandDetailsT, 
 	if col != nil {
 		g := glob.Parse(d.pattern, false)
 		if g.Limits[0] == "" && g.Limits[1] == "" {
-			col.Scan(false, iter)
+			col.Scan(false, nil, iter)
 		} else {
-			col.ScanRange(g.Limits[0], g.Limits[1], false, iter)
+			col.ScanRange(g.Limits[0], g.Limits[1], false, nil, iter)
 		}
 		var atLeastOneNotDeleted bool
 		for i, dc := range d.children {
