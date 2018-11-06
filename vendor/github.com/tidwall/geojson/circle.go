@@ -9,7 +9,7 @@ import (
 
 // Circle ...
 type Circle struct {
-	Object
+	object    Object
 	center    geometry.Point
 	meters    float64
 	haversine float64
@@ -27,25 +27,8 @@ func NewCircle(center geometry.Point, meters float64, steps int) *Circle {
 	g.center = center
 	g.meters = meters
 	g.steps = steps
-	if meters <= 0 {
-		g.Object = NewPoint(center)
-	} else {
+	if meters > 0 {
 		meters = geo.NormalizeDistance(meters)
-		var points []geometry.Point
-		step := 360.0 / float64(steps)
-		i := 0
-		for deg := 360.0; deg > 0; deg -= step {
-			lat, lon := geo.DestinationPoint(center.Y, center.X, meters, deg)
-			points = append(points, geometry.Point{X: lon, Y: lat})
-			i++
-		}
-		// TODO: account for the pole and antimerdian. In most cases only a
-		// polygon is needed, but when the circle bounds passes the 90/180
-		// lines, we need to create a multipolygon
-		points = append(points, points[0])
-		g.Object = NewPolygon(
-			geometry.NewPoly(points, nil, geometry.DefaultIndexOptions),
-		)
 		g.haversine = geo.DistanceToHaversine(meters)
 	}
 	return g
@@ -128,7 +111,7 @@ func (g *Circle) Contains(obj Object) bool {
 		return true
 	default:
 		// No simple cases, so using polygon approximation.
-		return g.Object.Contains(other)
+		return g.getObject().Contains(other)
 	}
 }
 
@@ -185,6 +168,66 @@ func (g *Circle) Intersects(obj Object) bool {
 		return false
 	default:
 		// No simple cases, so using polygon approximation.
-		return g.Object.Intersects(obj)
+		return g.getObject().Intersects(obj)
 	}
+}
+
+// Empty ...
+func (g *Circle) Empty() bool {
+	return false
+}
+
+// ForEach ...
+func (g *Circle) ForEach(iter func(geom Object) bool) bool {
+	return iter(g)
+}
+
+// NumPoints ...
+func (g *Circle) NumPoints() int {
+	// should this be g.steps?
+	return 1
+}
+
+// Distance ...
+func (g *Circle) Distance(other Object) float64 {
+	return g.getObject().Distance(other)
+}
+
+// Rect ...
+func (g *Circle) Rect() geometry.Rect {
+	return g.getObject().Rect()
+}
+
+// Spatial ...
+func (g *Circle) Spatial() Spatial {
+	return g.getObject().Spatial()
+}
+
+func (g *Circle) getObject() Object {
+	if g.object != nil {
+		return g.object
+	}
+	return makeCircleObject(g.center, g.meters, g.steps)
+}
+
+func makeCircleObject(center geometry.Point, meters float64, steps int) Object {
+	if meters <= 0 {
+		return NewPoint(center)
+	}
+	meters = geo.NormalizeDistance(meters)
+	var points []geometry.Point
+	step := 360.0 / float64(steps)
+	i := 0
+	for deg := 360.0; deg > 0; deg -= step {
+		lat, lon := geo.DestinationPoint(center.Y, center.X, meters, deg)
+		points = append(points, geometry.Point{X: lon, Y: lat})
+		i++
+	}
+	// TODO: account for the pole and antimerdian. In most cases only a
+	// polygon is needed, but when the circle bounds passes the 90/180
+	// lines, we need to create a multipolygon
+	points = append(points, points[0])
+	return NewPolygon(
+		geometry.NewPoly(points, nil, geometry.DefaultIndexOptions),
+	)
 }
