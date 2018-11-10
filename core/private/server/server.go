@@ -92,14 +92,15 @@ type Server struct {
 	exlistmu sync.RWMutex
 	exlist   []exitem
 
-	mu      sync.RWMutex
-	aof     *os.File                        // active aof file
-	aofbuf  []byte                          // prewrite buffer
-	aofsz   int                             // active size of the aof file
-	qdb     *buntdb.DB                      // hook queue log
-	qidx    uint64                          // hook queue log last idx
-	cols    ds.BTree                        // data collections
-	expires map[string]map[string]time.Time // synced with cols
+	mu       sync.RWMutex
+	aof      *os.File                        // active aof file
+	aofdirty int32                           // mark the aofbuf as having data
+	aofbuf   []byte                          // prewrite buffer
+	aofsz    int                             // active size of the aof file
+	qdb      *buntdb.DB                      // hook queue log
+	qidx     uint64                          // hook queue log last idx
+	cols     ds.BTree                        // data collections
+	expires  map[string]map[string]time.Time // synced with cols
 
 	follows    map[*bytes.Buffer]bool
 	fcond      *sync.Cond
@@ -476,9 +477,12 @@ func (server *Server) evioServe() error {
 	}
 
 	events.PreWrite = func() {
-		server.mu.Lock()
-		defer server.mu.Unlock()
-		server.flushAOF()
+		if atomic.LoadInt32(&server.aofdirty) != 0 {
+			server.mu.Lock()
+			defer server.mu.Unlock()
+			server.flushAOF()
+			atomic.StoreInt32(&server.aofdirty, 1)
+		}
 	}
 
 	return evio.Serve(events, fmt.Sprintf("%s:%d", server.host, server.port))
@@ -656,7 +660,7 @@ func (server *Server) netServe() error {
 						server.flushAOF()
 					}()
 					conn.Write(client.out)
-					client.out = client.out[:0]
+					client.out = nil
 				}
 				if close {
 					break
@@ -853,6 +857,7 @@ func (server *Server) handleInputCommand(client *Client, msg *Message) error {
 			return err
 		}
 	}
+
 	// Ping. Just send back the response. No need to put through the pipeline.
 	if msg.Command() == "ping" || msg.Command() == "echo" {
 		switch msg.OutputType {
@@ -870,6 +875,7 @@ func (server *Server) handleInputCommand(client *Client, msg *Message) error {
 		}
 		return nil
 	}
+
 	writeErr := func(errMsg string) error {
 		switch msg.OutputType {
 		case JSON:
@@ -913,6 +919,7 @@ func (server *Server) handleInputCommand(client *Client, msg *Message) error {
 			return writeErr("invalid password")
 		}
 	}
+
 	// choose the locking strategy
 	switch msg.Command() {
 	default:
@@ -946,6 +953,7 @@ func (server *Server) handleInputCommand(client *Client, msg *Message) error {
 		"chans", "search", "ttl", "bounds", "server", "info", "type", "jget",
 		"evalro", "evalrosha":
 		// read operations
+
 		server.mu.RLock()
 		defer server.mu.RUnlock()
 		if server.config.followHost() != "" && !server.fcuponce {
@@ -984,7 +992,6 @@ func (server *Server) handleInputCommand(client *Client, msg *Message) error {
 	}
 
 	res, d, err := server.command(msg, client)
-
 	if res.Type() == resp.Error {
 		return writeErr(res.String())
 	}
@@ -1003,7 +1010,6 @@ func (server *Server) handleInputCommand(client *Client, msg *Message) error {
 			return err
 		}
 	}
-
 	if !isRespValueEmptyString(res) {
 		var resStr string
 		resStr, err := serializeOutput(res)
@@ -1275,6 +1281,7 @@ const (
 
 // Message is a resp message
 type Message struct {
+	_command   string
 	Args       []string
 	ConnType   Type
 	OutputType Type
@@ -1283,7 +1290,10 @@ type Message struct {
 
 // Command returns the first argument as a lowercase string
 func (msg *Message) Command() string {
-	return strings.ToLower(msg.Args[0])
+	if msg._command == "" {
+		msg._command = strings.ToLower(msg.Args[0])
+	}
+	return msg._command
 }
 
 // PipelineReader ...
