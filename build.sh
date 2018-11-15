@@ -4,17 +4,17 @@ set -e
 cd $(dirname "${BASH_SOURCE[0]}")
 OD="$(pwd)"
 
-VERSION=1.14.0
+VERSION=1.14.1
 PROTECTED_MODE="no"
 
 # Hardcode some values to the core package
-LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/pkg/core.Version=${VERSION}"
+LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.Version=${VERSION}"
 if [ -d ".git" ]; then
-	LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/pkg/core.GitSHA=$(git rev-parse --short HEAD)"
+	LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.GitSHA=$(git rev-parse --short HEAD)"
 fi
-LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/pkg/core.BuildTime=$(date +%FT%T%z)"
+LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.BuildTime=$(date +%FT%T%z)"
 if [ "$PROTECTED_MODE" == "no" ]; then
-	LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/pkg/core.ProtectedMode=no"
+	LDFLAGS="$LDFLAGS -X github.com/tidwall/propgeo/core.ProtectedMode=no"
 fi
 
 if [ "$1" == "update-version" ]; then
