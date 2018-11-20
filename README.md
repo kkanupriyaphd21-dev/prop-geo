@@ -1,11 +1,11 @@
 <p align="center">
   <a href="http://propgeo.com"><img 
-    src="/internal/assets/logo1500.png" 
-    width="200" height="200" border="0" alt="PropGeo"></a>
+    src="/internal/assets/logo.png" 
+    width="315" height="120" border="0" alt="PropGeo"></a>
 </p>
 <p align="center">
 <a href="https://join.slack.com/t/propgeo/shared_invite/enQtMzQ0OTEwMDUxMzc5LTc0NTJjZmM3YjFhOGZiZGU2NDNjOWEwM2Q5ZWE3MzFiYWZkZDIyN2U2ZmUzZDBmODU0MjI1ZjQ0N2Y1M2I1NTg"><img src="https://img.shields.io/badge/slack-channel-orange.svg" alt="Slack Channel"></a>
-<a href="https://github.com/tidwall/propgeo/releases"><img src="https://img.shields.io/badge/version-1.14.1-green.svg?" alt="Version"></a>
+<a href="https://github.com/tidwall/propgeo/releases"><img src="https://img.shields.io/badge/version-1.14.3-green.svg?" alt="Version"></a>
 <a href="https://travis-ci.org/tidwall/propgeo"><img src="https://travis-ci.org/tidwall/propgeo.svg?branch=master" alt="Build Status"></a>
 <a href="https://hub.docker.com/r/propgeo/propgeo"><img src="https://img.shields.io/badge/docker-ready-blue.svg" alt="Docker Ready"></a>
 </p>
