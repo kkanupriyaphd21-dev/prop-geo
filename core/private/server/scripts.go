@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tidwall/geojson/geo"
 	"github.com/tidwall/resp"
 	"github.com/tidwall/propgeo/internal/log"
 	"github.com/yuin/gopher-lua"
@@ -143,22 +142,12 @@ func (pl *lStatePool) New() *lua.LState {
 		ls.Push(lua.LString(shaSum))
 		return 1
 	}
-	distanceTo := func(ls *lua.LState) int {
-		dt := geo.DistanceTo(
-			float64(ls.ToNumber(1)),
-			float64(ls.ToNumber(2)),
-			float64(ls.ToNumber(3)),
-			float64(ls.ToNumber(4)))
-		ls.Push(lua.LNumber(dt))
-		return 1
-	}
 	var exports = map[string]lua.LGFunction{
 		"call":         call,
 		"pcall":        pcall,
 		"error_reply":  errorReply,
 		"status_reply": statusReply,
 		"sha1hex":      sha1hex,
-		"distance_to":	distanceTo,
 	}
 	L.SetGlobal("propgeo", L.SetFuncs(L.NewTable(), exports))
 
@@ -586,10 +575,6 @@ func (c *Server) commandInScript(msg *Message) (
 		res, d, err = c.cmdDrop(msg)
 	case "expire":
 		res, d, err = c.cmdExpire(msg)
-	case "rename":
-		res, d, err = c.cmdRename(msg, false)
-	case "renamenx":
-		res, d, err = c.cmdRename(msg, true)
 	case "persist":
 		res, d, err = c.cmdPersist(msg)
 	case "ttl":
@@ -657,8 +642,7 @@ func (c *Server) luaPropGeoAtomicRW(msg *Message) (resp.Value, error) {
 	switch msg.Command() {
 	default:
 		return resp.NullValue(), errCmdNotSupported
-	case "set", "del", "drop", "fset", "flushdb", "expire", "persist", "jset", "pdel",
-		"rename", "renamenx":
+	case "set", "del", "drop", "fset", "flushdb", "expire", "persist", "jset", "pdel":
 		// write operations
 		write = true
 		if c.config.followHost() != "" {
@@ -694,9 +678,7 @@ func (c *Server) luaPropGeoAtomicRO(msg *Message) (resp.Value, error) {
 	default:
 		return resp.NullValue(), errCmdNotSupported
 
-	case "set", "del", "drop", "fset", "flushdb", "expire", "persist", "jset", "pdel",
-		"rename", "renamenx":
-		// write operations
+	case "set", "del", "drop", "fset", "flushdb", "expire", "persist", "jset", "pdel":
 		return resp.NullValue(), errReadOnly
 
 	case "get", "keys", "scan", "nearby", "within", "intersects", "hooks", "search",
@@ -722,8 +704,7 @@ func (c *Server) luaPropGeoNonAtomic(msg *Message) (resp.Value, error) {
 	switch msg.Command() {
 	default:
 		return resp.NullValue(), errCmdNotSupported
-	case "set", "del", "drop", "fset", "flushdb", "expire", "persist", "jset", "pdel",
-		"rename", "renamenx":
+	case "set", "del", "drop", "fset", "flushdb", "expire", "persist", "jset", "pdel":
 		// write operations
 		write = true
 		c.mu.Lock()

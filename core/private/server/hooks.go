@@ -204,7 +204,7 @@ func (c *Server) cmdSetHook(msg *Message, chanCmd bool) (
 			hook)
 	}
 
-	hook.Open() // Opens a goroutine to notify the hook
+	hook.Open()
 	if !hook.expires.IsZero() {
 		c.hookex.Push(hook)
 	}
