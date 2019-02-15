@@ -2,6 +2,7 @@
 propgeo-*
 !cmd/propgeo-*
 *.test
+*.prof
 data*/
 coverage.out
 packages/
