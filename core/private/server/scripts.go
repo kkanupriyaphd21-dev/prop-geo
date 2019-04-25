@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -31,6 +32,7 @@ var errNotLeader = errors.New("not the leader")
 var errReadOnly = errors.New("read only")
 var errCatchingUp = errors.New("catching up to leader")
 var errNoLuasAvailable = errors.New("no interpreters available")
+var errTimeout = errors.New("timeout")
 
 // Go-routine-safe pool of read-to-go lua states
 type lStatePool struct {
@@ -391,6 +393,15 @@ func (c *Server) cmdEvalUnified(scriptIsSha bool, msg *Message) (res resp.Value,
 	if err != nil {
 		return
 	}
+	luaDeadline := lua.LNil
+	if msg.Deadline != nil {
+		dlTime := msg.Deadline.GetDeadlineTime()
+		ctx, cancel := context.WithDeadline(context.Background(), dlTime)
+		defer cancel()
+		luaState.SetContext(ctx)
+		defer luaState.RemoveContext()
+		luaDeadline = lua.LNumber(float64(dlTime.UnixNano()) / 1e9)
+	}
 	defer c.luapool.Put(luaState)
 
 	keysTbl := luaState.CreateTable(int(numkeys), 0)
@@ -422,6 +433,7 @@ func (c *Server) cmdEvalUnified(scriptIsSha bool, msg *Message) (res resp.Value,
 		luaState, map[string]lua.LValue{
 			"KEYS":     keysTbl,
 			"ARGV":     argsTbl,
+			"DEADLINE": luaDeadline,
 			"EVAL_CMD": lua.LString(msg.Command()),
 		})
 
@@ -451,9 +463,13 @@ func (c *Server) cmdEvalUnified(scriptIsSha bool, msg *Message) (res resp.Value,
 		luaState, map[string]lua.LValue{
 			"KEYS":     lua.LNil,
 			"ARGV":     lua.LNil,
+			"DEADLINE": lua.LNil,
 			"EVAL_CMD": lua.LNil,
 		})
 	if err := luaState.PCall(0, 1, nil); err != nil {
+		if strings.Contains(err.Error(), "context deadline exceeded") {
+			msg.Deadline.Check()
+		}
 		log.Debugf("%v", err.Error())
 		return NOMessage, makeSafeErr(err)
 	}
@@ -632,6 +648,13 @@ func (c *Server) luaPropGeoCall(evalcmd string, cmd string, args ...string) (res
 	msg := &Message{}
 	msg.OutputType = RESP
 	msg.Args = append([]string{cmd}, args...)
+
+	if msg.Command() == "timeout" {
+		if err := rewriteTimeoutMsg(msg); err != nil {
+			return resp.NullValue(), err
+		}
+	}
+
 	switch msg.Command() {
 	case "ping", "echo", "auth", "massinsert", "shutdown", "gc",
 		"sethook", "pdelhook", "delhook",
@@ -679,7 +702,28 @@ func (c *Server) luaPropGeoAtomicRW(msg *Message) (resp.Value, error) {
 		}
 	}
 
-	res, d, err := c.commandInScript(msg)
+	res, d, err := func() (res resp.Value, d commandDetails, err error) {
+		if msg.Deadline != nil {
+			if write {
+				res = NOMessage
+				err  = errTimeoutOnCmd(msg.Command())
+				return
+			}
+			defer func() {
+				if msg.Deadline.Hit() {
+					v := recover()
+					if v != nil {
+						if s, ok := v.(string); !ok || s != "deadline" {
+							panic(v)
+						}
+					}
+					res = NOMessage
+					err = errTimeout
+				}
+			}()
+		}
+		return c.commandInScript(msg)
+	}()
 	if err != nil {
 		return resp.NullValue(), err
 	}
@@ -711,7 +755,23 @@ func (c *Server) luaPropGeoAtomicRO(msg *Message) (resp.Value, error) {
 		}
 	}
 
-	res, _, err := c.commandInScript(msg)
+	res, _, err := func() (res resp.Value, d commandDetails, err error) {
+		if msg.Deadline != nil {
+			defer func() {
+				if msg.Deadline.Hit() {
+					v := recover()
+					if v != nil {
+						if s, ok := v.(string); !ok || s != "deadline" {
+							panic(v)
+						}
+					}
+					res = NOMessage
+					err = errTimeout
+				}
+			}()
+		}
+		return c.commandInScript(msg)
+	}()
 	if err != nil {
 		return resp.NullValue(), err
 	}
@@ -748,7 +808,28 @@ func (c *Server) luaPropGeoNonAtomic(msg *Message) (resp.Value, error) {
 		}
 	}
 
-	res, d, err := c.commandInScript(msg)
+	res, d, err := func() (res resp.Value, d commandDetails, err error) {
+		if msg.Deadline != nil {
+			if write {
+				res = NOMessage
+				err  = errTimeoutOnCmd(msg.Command())
+				return
+			}
+			defer func() {
+				if msg.Deadline.Hit() {
+					v := recover()
+					if v != nil {
+						if s, ok := v.(string); !ok || s != "deadline" {
+							panic(v)
+						}
+					}
+					res = NOMessage
+					err = errTimeout
+				}
+			}()
+		}
+		return c.commandInScript(msg)
+	}()
 	if err != nil {
 		return resp.NullValue(), err
 	}
