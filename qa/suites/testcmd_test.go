@@ -8,6 +8,7 @@ func subTestTestCmd(t *testing.T, mc *mockServer) {
 	runStep(t, mc, "WITHIN", testcmd_WITHIN_test)
 	runStep(t, mc, "INTERSECTS", testcmd_INTERSECTS_test)
 	runStep(t, mc, "INTERSECTS_CLIP", testcmd_INTERSECTS_CLIP_test)
+	runStep(t, mc, "ExpressionErrors", testcmd_expressionErrors_test)
 	runStep(t, mc, "Expressions", testcmd_expression_test)
 }
 
@@ -117,6 +118,40 @@ func testcmd_INTERSECTS_CLIP_test(mc *mockServer) error {
 	})
 }
 
+func testcmd_expressionErrors_test(mc *mockServer) error {
+	return mc.DoBatch([][]interface{}{
+		{"SET", "mykey", "foo", "OBJECT", `{"type":"LineString","coordinates":[[-122.4408378,37.7341129],[-122.4408378,37.733]]}`}, {"OK"},
+		{"SET", "mykey", "bar", "OBJECT", `{"type":"LineString","coordinates":[[-122.4408378,37.7341129],[-122.4408378,37.733]]}`}, {"OK"},
+		{"SET", "mykey", "baz", "OBJECT", `{"type":"LineString","coordinates":[[-122.4408378,37.7341129],[-122.4408378,37.733]]}`}, {"OK"},
+
+		{"TEST", "GET", "mykey", "foo", "INTERSECTS", "(", "GET", "mykey", "bar"}, {
+			"ERR wrong number of arguments for 'test' command"},
+		{"TEST", "GET", "mykey", "foo", "INTERSECTS", "GET", "mykey", "bar", ")"}, {
+			"ERR invalid argument ')'"},
+
+		{"TEST", "GET", "mykey", "foo", "INTERSECTS", "OR", "GET", "mykey", "bar"}, {
+			"ERR invalid argument 'or'"},
+		{"TEST", "GET", "mykey", "foo", "INTERSECTS", "AND", "GET", "mykey", "bar"}, {
+			"ERR invalid argument 'and'"},
+		{"TEST", "GET", "mykey", "foo", "INTERSECTS", "GET", "mykey", "bar", "OR", "AND",  "GET", "mykey", "baz"}, {
+			"ERR invalid argument 'and'"},
+		{"TEST", "GET", "mykey", "foo", "INTERSECTS", "GET", "mykey", "bar", "AND", "OR",  "GET", "mykey", "baz"}, {
+			"ERR invalid argument 'or'"},
+		{"TEST", "GET", "mykey", "foo", "INTERSECTS", "GET", "mykey", "bar", "OR", "OR",  "GET", "mykey", "baz"}, {
+			"ERR invalid argument 'or'"},
+		{"TEST", "GET", "mykey", "foo", "INTERSECTS", "GET", "mykey", "bar", "AND", "AND",  "GET", "mykey", "baz"}, {
+			"ERR invalid argument 'and'"},
+		{"TEST", "GET", "mykey", "foo", "INTERSECTS", "GET", "mykey", "bar", "OR"}, {
+			"ERR wrong number of arguments for 'test' command"},
+		{"TEST", "GET", "mykey", "foo", "INTERSECTS", "GET", "mykey", "bar", "AND"}, {
+			"ERR wrong number of arguments for 'test' command"},
+		{"TEST", "GET", "mykey", "foo", "INTERSECTS", "GET", "mykey", "bar", "NOT"}, {
+			"ERR wrong number of arguments for 'test' command"},
+		{"TEST", "GET", "mykey", "foo", "INTERSECTS", "GET", "mykey", "bar", "NOT", "AND",  "GET", "mykey", "baz"}, {
+			"ERR invalid argument 'and'"},
+	})
+}
+
 func testcmd_expression_test(mc *mockServer) error {
 	poly := `{
 				"type": "Polygon",
@@ -136,6 +171,10 @@ func testcmd_expression_test(mc *mockServer) error {
 	return mc.DoBatch([][]interface{}{
 		{"SET", "mykey", "line3", "OBJECT", `{"type":"LineString","coordinates":[[-122.4408378,37.7341129],[-122.4408378,37.733]]}`}, {"OK"},
 		{"SET", "mykey", "poly8", "OBJECT", poly8}, {"OK"},
+
+		{"TEST", "OBJECT", poly9, "INTERSECTS", "NOT", "OBJECT", poly}, {"0"},
+		{"TEST", "OBJECT", poly9, "INTERSECTS", "NOT", "NOT", "OBJECT", poly}, {"1"},
+		{"TEST", "OBJECT", poly9, "INTERSECTS", "NOT", "NOT", "NOT", "OBJECT", poly}, {"0"},
 
 		{"TEST", "OBJECT", poly9, "INTERSECTS", "OBJECT", poly8, "OR", "OBJECT", poly}, {"1"},
 		{"TEST", "OBJECT", poly9, "INTERSECTS", "OBJECT", poly8, "AND", "OBJECT", poly}, {"1"},
