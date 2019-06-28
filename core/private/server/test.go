@@ -231,9 +231,8 @@ func (s *Server) cmdTest(msg *Message) (res resp.Value, err error) {
 
 	var ok bool
 	var test string
-	var clipped geojson.Object
-	var area1, area2 *areaExpression
-	if vs, area1, err = s.parseAreaExpression(vs, false); err != nil {
+	var obj1, obj2, clipped geojson.Object
+	if vs, obj1, err = s.parseArea(vs, false); err != nil {
 		return
 	}
 	if vs, test, ok = tokenval(vs); !ok || test == "" {
@@ -260,11 +259,7 @@ func (s *Server) cmdTest(msg *Message) (res resp.Value, err error) {
 			doClip = true
 		}
 	}
-	if vs, area2, err = s.parseAreaExpression(vs, doClip); err != nil {
-		return
-	}
-	if doClip && (area1.obj == nil || area2.obj == nil) {
-		err = errInvalidArgument("clip")
+	if vs, obj2, err = s.parseArea(vs, doClip); err != nil {
 		return
 	}
 	if len(vs) != 0 {
@@ -273,14 +268,14 @@ func (s *Server) cmdTest(msg *Message) (res resp.Value, err error) {
 
 	var result int
 	if lTest == "within" {
-		if area1.WithinExpr(area2) {
+		if obj1.Within(obj2) {
 			result = 1
 		}
 	} else if lTest == "intersects" {
-		if area1.IntersectsExpr(area2) {
+		if obj1.Intersects(obj2) {
 			result = 1
 			if doClip {
-				clipped = clip.Clip(area1.obj, area2.obj)
+				clipped = clip.Clip(obj1, obj2)
 			}
 		}
 	}
