@@ -147,21 +147,6 @@ if [ "$1" == "package" ]; then
 	exit
 fi
 
-# temp directory for storing isolated environment.
-TMP="$(mktemp -d -t propgeo.XXXX)"
-function rmtemp {
-	rm -rf "$TMP"
-}
-trap rmtemp EXIT
-
-if [ "$NOLINK" != "1" ]; then
-    # symlink root to isolated directory
-	mkdir -p "$TMP/go/src/github.com/tidwall"
-    ln -s $OD "$TMP/go/src/github.com/tidwall/propgeo"
-    export GOPATH="$TMP/go"
-	cd "$TMP/go/src/github.com/tidwall/propgeo"
-fi
-
 # generate the core package
 core/gen.sh
 
@@ -175,12 +160,6 @@ go build -ldflags "$LDFLAGS -extldflags '-static'" -o "$OD/propgeo-luamemtest" c
 
 # test if requested
 if [ "$1" == "test" ]; then
-	$OD/propgeo-server -p 9876 -d "$TMP" -q &
-	PID=$!
-	function testend {
-		kill $PID &
-	}
-	trap testend EXIT
 	cd tests && go test && cd ..
 	go test $(go list ./... | grep -v /vendor/ | grep -v /tests)
 fi
