@@ -44,3 +44,5 @@ uninstall:
 	rm -f /usr/local/bin/propgeo-cli
 	rm -f /usr/local/bin/propgeo-benchmark
 
+travis-docker-push: propgeo-server propgeo-cli propgeo-benchmark
+	@./scripts/travis-docker-push.sh
