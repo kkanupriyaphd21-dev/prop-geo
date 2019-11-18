@@ -16,7 +16,7 @@ propgeo-benchmark:
 propgeo-luamemtest:
 	@./scripts/build.sh propgeo-luamemtest
 
-test:
+test: all
 	@./scripts/test.sh
 
 package:
@@ -43,6 +43,3 @@ uninstall:
 	rm -f /usr/local/bin/propgeo-server
 	rm -f /usr/local/bin/propgeo-cli
 	rm -f /usr/local/bin/propgeo-benchmark
-
-travis-docker-push: propgeo-server propgeo-cli propgeo-benchmark
-	@./scripts/travis-docker-push.sh
