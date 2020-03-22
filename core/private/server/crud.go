@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -22,12 +23,22 @@ type fvt struct {
 	value float64
 }
 
-func orderFields(fmap map[string]int, farr []string, fields []float64) []fvt {
+type byField []fvt
+
+func (a byField) Len() int {
+	return len(a)
+}
+func (a byField) Less(i, j int) bool {
+	return a[i].field < a[j].field
+}
+func (a byField) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
+}
+
+func orderFields(fmap map[string]int, fields []float64) []fvt {
 	var fv fvt
-	var idx int
 	fvs := make([]fvt, 0, len(fmap))
-	for _, field := range farr {
-		idx = fmap[field]
+	for field, idx := range fmap {
 		if idx < len(fields) {
 			fv.field = field
 			fv.value = fields[idx]
@@ -36,6 +47,7 @@ func orderFields(fmap map[string]int, farr []string, fields []float64) []fvt {
 			}
 		}
 	}
+	sort.Sort(byField(fvs))
 	return fvs
 }
 func (server *Server) cmdBounds(msg *Message) (resp.Value, error) {
@@ -243,7 +255,7 @@ func (server *Server) cmdGet(msg *Message) (resp.Value, error) {
 		return NOMessage, errInvalidNumberOfArguments
 	}
 	if withfields {
-		fvs := orderFields(col.FieldMap(), col.FieldArr(), fields)
+		fvs := orderFields(col.FieldMap(), fields)
 		if len(fvs) > 0 {
 			fvals := make([]resp.Value, 0, len(fvs)*2)
 			if msg.OutputType == JSON {
