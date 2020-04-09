@@ -7,7 +7,6 @@ import (
 
 func clipPolygon(
 	polygon *geojson.Polygon, clipper geojson.Object,
-	opts *geometry.IndexOptions,
 ) geojson.Object {
 	rect := clipper.Rect()
 	var newPoints [][]geometry.Point
@@ -19,9 +18,7 @@ func clipPolygon(
 		for i := 0; i < len(ringPoints); i++ {
 			ringPoints[i] = ring.PointAt(i)
 		}
-		if clippedRing := clipRing(ringPoints, rect); len(clippedRing) > 0 {
-			newPoints = append(newPoints, clippedRing)
-		}
+		newPoints = append(newPoints, clipRing(ringPoints, rect))
 	}
 
 	var exterior []geometry.Point
@@ -33,7 +30,7 @@ func clipPolygon(
 		holes = newPoints[1:]
 	}
 	newPoly := geojson.NewPolygon(
-		geometry.NewPoly(exterior, holes, opts),
+		geometry.NewPoly(exterior, holes, nil),
 	)
 	if newPoly.Empty() {
 		return geojson.NewMultiPolygon(nil)

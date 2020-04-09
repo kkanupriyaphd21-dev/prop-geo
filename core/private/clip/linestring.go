@@ -7,7 +7,6 @@ import (
 
 func clipLineString(
 	lineString *geojson.LineString, clipper geojson.Object,
-	opts *geometry.IndexOptions,
 ) geojson.Object {
 	bbox := clipper.Rect()
 	var newPoints [][]geometry.Point
@@ -35,7 +34,7 @@ func clipLineString(
 	var children []*geometry.Line
 	for _, points := range newPoints {
 		children = append(children,
-			geometry.NewLine(points, opts))
+			geometry.NewLine(points, nil))
 	}
 	if len(children) == 1 {
 		return geojson.NewLineString(children[0])

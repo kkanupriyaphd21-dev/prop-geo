@@ -6,22 +6,20 @@ import (
 )
 
 // Clip clips the contents of a geojson object and return
-func Clip(
-	obj geojson.Object, clipper geojson.Object, opts *geometry.IndexOptions,
-) (clipped geojson.Object) {
+func Clip(obj geojson.Object, clipper geojson.Object) (clipped geojson.Object) {
 	switch obj := obj.(type) {
 	case *geojson.Point:
-		return clipPoint(obj, clipper, opts)
+		return clipPoint(obj, clipper)
 	case *geojson.Rect:
-		return clipRect(obj, clipper, opts)
+		return clipRect(obj, clipper)
 	case *geojson.LineString:
-		return clipLineString(obj, clipper, opts)
+		return clipLineString(obj, clipper)
 	case *geojson.Polygon:
-		return clipPolygon(obj, clipper, opts)
+		return clipPolygon(obj, clipper)
 	case *geojson.Feature:
-		return clipFeature(obj, clipper, opts)
+		return clipFeature(obj, clipper)
 	case geojson.Collection:
-		return clipCollection(obj, clipper, opts)
+		return clipCollection(obj, clipper)
 	}
 	return obj
 }

@@ -3,15 +3,18 @@ package server
 import (
 	"bytes"
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/mmcloughlin/geohash"
 	"github.com/tidwall/geojson"
+	"github.com/tidwall/geojson/geo"
 	"github.com/tidwall/geojson/geometry"
 	"github.com/tidwall/resp"
 	"github.com/tidwall/propgeo/internal/bing"
+	"github.com/tidwall/propgeo/internal/deadline"
 	"github.com/tidwall/propgeo/internal/glob"
 )
 
@@ -367,29 +370,22 @@ func (server *Server) cmdNearby(msg *Message) (res resp.Value, err error) {
 	}
 	sw.writeHead()
 	if sw.col != nil {
-		maxDist := s.obj.(*geojson.Circle).Meters()
 		iter := func(id string, o geojson.Object, fields []float64, dist float64) bool {
-			if server.hasExpired(s.key, id) {
-				return true
-			}
-
-			if maxDist > 0 && dist > maxDist {
-				return false
-			}
-
 			meters := 0.0
 			if s.distance {
-				meters = dist
+				meters = geo.DistanceFromHaversine(dist)
 			}
 			return sw.writeObject(ScanWriterParams{
-				id:       id,
-				o:        o,
-				fields:   fields,
-				distance: meters,
-				noLock:   true,
+				id:              id,
+				o:               o,
+				fields:          fields,
+				distance:        meters,
+				noLock:          true,
+				ignoreGlobMatch: true,
+				skipTesting:     true,
 			})
 		}
-		sw.col.Nearby(s.obj, sw, msg.Deadline, iter)
+		server.nearestNeighbors(&s, sw, msg.Deadline, s.obj.(*geojson.Circle), iter)
 	}
 	sw.writeFoot()
 	if msg.OutputType == JSON {
@@ -397,6 +393,48 @@ func (server *Server) cmdNearby(msg *Message) (res resp.Value, err error) {
 		return resp.BytesValue(wr.Bytes()), nil
 	}
 	return sw.respOut, nil
+}
+
+type iterItem struct {
+	id     string
+	o      geojson.Object
+	fields []float64
+	dist   float64
+}
+
+func (server *Server) nearestNeighbors(
+	s *liveFenceSwitches, sw *scanWriter, dl *deadline.Deadline,
+	target *geojson.Circle,
+	iter func(id string, o geojson.Object, fields []float64, dist float64,
+	) bool) {
+	maxDist := target.Haversine()
+	var items []iterItem
+	sw.col.Nearby(target, sw, dl, func(id string, o geojson.Object, fields []float64) bool {
+		if server.hasExpired(s.key, id) {
+			return true
+		}
+		ok, keepGoing, _ := sw.testObject(id, o, fields, false)
+		if !ok {
+			return true
+		}
+		dist := target.HaversineTo(o.Center())
+		if maxDist > 0 && dist > maxDist {
+			return false
+		}
+		items = append(items, iterItem{id: id, o: o, fields: fields, dist: dist})
+		if !keepGoing {
+			return false
+		}
+		return uint64(len(items)) < sw.limit
+	})
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].dist < items[j].dist
+	})
+	for _, item := range items {
+		if !iter(item.id, item.o, item.fields, item.dist) {
+			return
+		}
+	}
 }
 
 func (server *Server) cmdWithin(msg *Message) (res resp.Value, err error) {

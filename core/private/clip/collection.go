@@ -1,17 +1,13 @@
 package clip
 
-import (
-	"github.com/tidwall/geojson"
-	"github.com/tidwall/geojson/geometry"
-)
+import "github.com/tidwall/geojson"
 
 func clipCollection(
 	collection geojson.Collection, clipper geojson.Object,
-	opts *geometry.IndexOptions,
 ) geojson.Object {
 	var features []geojson.Object
 	for _, feature := range collection.Children() {
-		feature = Clip(feature, clipper, opts)
+		feature = Clip(feature, clipper)
 		if feature.Empty() {
 			continue
 		}

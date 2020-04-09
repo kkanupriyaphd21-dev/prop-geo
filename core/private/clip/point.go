@@ -1,13 +1,8 @@
 package clip
 
-import (
-	"github.com/tidwall/geojson"
-	"github.com/tidwall/geojson/geometry"
-)
+import "github.com/tidwall/geojson"
 
-func clipPoint(
-	point *geojson.Point, clipper geojson.Object, opts *geometry.IndexOptions,
-) geojson.Object {
+func clipPoint(point *geojson.Point, clipper geojson.Object) geojson.Object {
 	if point.IntersectsRect(clipper.Rect()) {
 		return point
 	}
