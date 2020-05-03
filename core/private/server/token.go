@@ -116,7 +116,6 @@ func lc(s1, s2 string) bool {
 
 type whereT struct {
 	field string
-	index int
 	minx  bool
 	min   float64
 	maxx  bool
@@ -160,17 +159,12 @@ func zMinMaxFromWheres(wheres []whereT) (minZ, maxZ float64) {
 
 type whereinT struct {
 	field  string
-	index  int
-	valArr []float64
+	valMap map[float64]struct{}
 }
 
 func (wherein whereinT) match(value float64) bool {
-	for _, val := range wherein.valArr {
-		if val == value {
-			return true
-		}
-	}
-	return false
+	_, ok := wherein.valMap[value]
+	return ok
 }
 
 type whereevalT struct {
@@ -330,7 +324,7 @@ func (s *Server) parseSearchScanBaseTokens(
 						return
 					}
 				}
-				t.wheres = append(t.wheres, whereT{field, -1, minx, min, maxx, max})
+				t.wheres = append(t.wheres, whereT{field, minx, min, maxx, max})
 				continue
 			case "wherein":
 				vs = nvs
@@ -348,8 +342,9 @@ func (s *Server) parseSearchScanBaseTokens(
 					err = errInvalidArgument(nvalsStr)
 					return
 				}
-				valArr := make([]float64, nvals)
+				valMap := make(map[float64]struct{})
 				var val float64
+				var empty struct{}
 				for i = 0; i < nvals; i++ {
 					if vs, valStr, ok = tokenval(vs); !ok || valStr == "" {
 						err = errInvalidNumberOfArguments
@@ -359,9 +354,9 @@ func (s *Server) parseSearchScanBaseTokens(
 						err = errInvalidArgument(valStr)
 						return
 					}
-					valArr = append(valArr, val)
+					valMap[val] = empty
 				}
-				t.whereins = append(t.whereins, whereinT{field, -1, valArr})
+				t.whereins = append(t.whereins, whereinT{field, valMap})
 				continue
 			case "whereevalsha":
 				fallthrough

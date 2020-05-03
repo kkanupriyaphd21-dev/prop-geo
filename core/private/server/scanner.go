@@ -97,6 +97,8 @@ func (s *Server) newScanWriter(
 		msg:         msg,
 		cursor:      cursor,
 		limit:       limit,
+		wheres:      wheres,
+		whereins:    whereins,
 		whereevals:  whereevals,
 		output:      output,
 		nofields:    nofields,
@@ -115,25 +117,6 @@ func (s *Server) newScanWriter(
 	if sw.col != nil {
 		sw.fmap = sw.col.FieldMap()
 		sw.farr = sw.col.FieldArr()
-		// This fills index value in wheres/whereins
-		// so we don't have to map string field names for each tested object
-		var ok bool
-		if len(wheres) > 0 {
-			sw.wheres = make([]whereT, 0, len(wheres))
-			for _, where := range wheres {
-				if where.index, ok = sw.fmap[where.field]; ok {
-					sw.wheres = append(sw.wheres, where)
-				}
-			}
-		}
-		if len(whereins) > 0 {
-			sw.whereins = make([]whereinT, 0, len(whereins))
-			for _, wherein := range whereins {
-				if wherein.index, ok = sw.fmap[wherein.field]; ok {
-					sw.whereins = append(sw.whereins, wherein)
-				}
-			}
-		}
 	}
 	sw.fvals = make([]float64, len(sw.farr))
 	return sw, nil
@@ -229,8 +212,11 @@ func (sw *scanWriter) fieldMatch(fields []float64, o geojson.Object) (fvals []fl
 				continue
 			}
 			var value float64
-			if len(fields) > where.index {
-				value = fields[where.index]
+			idx, ok := sw.fmap[where.field]
+			if ok {
+				if len(fields) > idx {
+					value = fields[idx]
+				}
 			}
 			if !where.match(value) {
 				return
@@ -238,8 +224,11 @@ func (sw *scanWriter) fieldMatch(fields []float64, o geojson.Object) (fvals []fl
 		}
 		for _, wherein := range sw.whereins {
 			var value float64
-			if len(fields) > wherein.index {
-				value = fields[wherein.index]
+			idx, ok := sw.fmap[wherein.field]
+			if ok {
+				if len(fields) > idx {
+					value = fields[idx]
+				}
 			}
 			if !wherein.match(value) {
 				return
@@ -259,10 +248,12 @@ func (sw *scanWriter) fieldMatch(fields []float64, o geojson.Object) (fvals []fl
 			}
 		}
 	} else {
-		copy(sw.fvals, fields)
-		// fields might be shorter for this item, need to pad sw.fvals with zeros
-		for i := len(fields); i < len(sw.fvals); i++ {
-			sw.fvals[i] = 0
+		for idx := range sw.farr {
+			var value float64
+			if len(fields) > idx {
+				value = fields[idx]
+			}
+			sw.fvals[idx] = value
 		}
 		for _, where := range sw.wheres {
 			if where.field == "z" {
@@ -276,13 +267,21 @@ func (sw *scanWriter) fieldMatch(fields []float64, o geojson.Object) (fvals []fl
 				}
 				continue
 			}
-			value := sw.fvals[where.index]
+			var value float64
+			idx, ok := sw.fmap[where.field]
+			if ok {
+				value = sw.fvals[idx]
+			}
 			if !where.match(value) {
 				return
 			}
 		}
 		for _, wherein := range sw.whereins {
-			value := sw.fvals[wherein.index]
+			var value float64
+			idx, ok := sw.fmap[wherein.field]
+			if ok {
+				value = sw.fvals[idx]
+			}
 			if !wherein.match(value) {
 				return
 			}
@@ -369,7 +368,7 @@ func (sw *scanWriter) writeObject(opts ScanWriterParams) bool {
 		return sw.count < sw.limit
 	}
 	if opts.clip != nil {
-		opts.o = clip.Clip(opts.o, opts.clip)
+		opts.o = clip.Clip(opts.o, opts.clip, &sw.s.geomIndexOpts)
 	}
 	switch sw.msg.OutputType {
 	case JSON:
