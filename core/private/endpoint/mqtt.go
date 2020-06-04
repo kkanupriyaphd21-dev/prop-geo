@@ -32,7 +32,7 @@ func (conn *MQTTConn) Expired() bool {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if !conn.ex {
-		if time.Since(conn.t) > mqttExpiresAfter {
+		if time.Now().Sub(conn.t) > mqttExpiresAfter {
 			conn.close()
 			conn.ex = true
 		}

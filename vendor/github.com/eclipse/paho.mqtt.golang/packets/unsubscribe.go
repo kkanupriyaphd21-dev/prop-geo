@@ -6,8 +6,8 @@ import (
 	"io"
 )
 
-// UnsubscribePacket is an internal representation of the fields of the
-// Unsubscribe MQTT packet
+//UnsubscribePacket is an internal representation of the fields of the
+//Unsubscribe MQTT packet
 type UnsubscribePacket struct {
 	FixedHeader
 	MessageID uint16
@@ -15,7 +15,10 @@ type UnsubscribePacket struct {
 }
 
 func (u *UnsubscribePacket) String() string {
-	return fmt.Sprintf("%s MessageID: %d", u.FixedHeader, u.MessageID)
+	str := fmt.Sprintf("%s", u.FixedHeader)
+	str += " "
+	str += fmt.Sprintf("MessageID: %d", u.MessageID)
+	return str
 }
 
 func (u *UnsubscribePacket) Write(w io.Writer) error {
@@ -33,24 +36,20 @@ func (u *UnsubscribePacket) Write(w io.Writer) error {
 	return err
 }
 
-// Unpack decodes the details of a ControlPacket after the fixed
-// header has been read
+//Unpack decodes the details of a ControlPacket after the fixed
+//header has been read
 func (u *UnsubscribePacket) Unpack(b io.Reader) error {
-	var err error
-	u.MessageID, err = decodeUint16(b)
-	if err != nil {
-		return err
-	}
-
-	for topic, err := decodeString(b); err == nil && topic != ""; topic, err = decodeString(b) {
+	u.MessageID = decodeUint16(b)
+	var topic string
+	for topic = decodeString(b); topic != ""; topic = decodeString(b) {
 		u.Topics = append(u.Topics, topic)
 	}
 
-	return err
+	return nil
 }
 
-// Details returns a Details struct containing the Qos and
-// MessageID of this ControlPacket
+//Details returns a Details struct containing the Qos and
+//MessageID of this ControlPacket
 func (u *UnsubscribePacket) Details() Details {
 	return Details{Qos: 1, MessageID: u.MessageID}
 }

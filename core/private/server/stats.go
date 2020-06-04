@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/tidwall/resp"
 	"github.com/tidwall/propgeo/core"
+	"github.com/tidwall/propgeo/internal/collection"
 )
 
 var memStats runtime.MemStats
@@ -88,27 +88,9 @@ func (s *Server) cmdStats(msg *Message) (res resp.Value, err error) {
 		if err != nil {
 			return NOMessage, err
 		}
-		res = resp.StringValue(`{"ok":true,"stats":` + string(data) + `,"elapsed":"` + time.Since(start).String() + "\"}")
+		res = resp.StringValue(`{"ok":true,"stats":` + string(data) + `,"elapsed":"` + time.Now().Sub(start).String() + "\"}")
 	case RESP:
 		res = resp.ArrayValue(vals)
-	}
-	return res, nil
-}
-
-func (s *Server) cmdHealthz(msg *Message) (res resp.Value, err error) {
-	start := time.Now()
-	if s.config.followHost() != "" {
-		m := make(map[string]interface{})
-		s.basicStats(m)
-		if fmt.Sprintf("%v", m["caught_up"]) != "true" {
-			return NOMessage, errors.New("not caught up")
-		}
-	}
-	switch msg.OutputType {
-	case JSON:
-		res = resp.StringValue(`{"ok":true,"elapsed":"` + time.Since(start).String() + "\"}")
-	case RESP:
-		res = resp.SimpleStringValue("OK")
 	}
 	return res, nil
 }
@@ -159,8 +141,8 @@ func (s *Server) basicStats(m map[string]interface{}) {
 	m["num_collections"] = s.cols.Len()
 	m["num_hooks"] = len(s.hooks)
 	sz := 0
-	s.cols.Ascend(nil, func(v interface{}) bool {
-		col := v.(*collectionKeyContainer).col
+	s.cols.Scan(func(key string, value interface{}) bool {
+		col := value.(*collection.Collection)
 		sz += col.TotalWeight()
 		return true
 	})
@@ -168,8 +150,8 @@ func (s *Server) basicStats(m map[string]interface{}) {
 	points := 0
 	objects := 0
 	strings := 0
-	s.cols.Ascend(nil, func(v interface{}) bool {
-		col := v.(*collectionKeyContainer).col
+	s.cols.Scan(func(key string, value interface{}) bool {
+		col := value.(*collection.Collection)
 		points += col.PointCount()
 		objects += col.Count()
 		strings += col.StringCount()
@@ -320,8 +302,8 @@ func (s *Server) extStats(m map[string]interface{}) {
 	points := 0
 	objects := 0
 	strings := 0
-	s.cols.Ascend(nil, func(v interface{}) bool {
-		col := v.(*collectionKeyContainer).col
+	s.cols.Scan(func(key string, value interface{}) bool {
+		col := value.(*collection.Collection)
 		points += col.PointCount()
 		objects += col.Count()
 		strings += col.StringCount()
@@ -348,8 +330,8 @@ func (s *Server) extStats(m map[string]interface{}) {
 	m["propgeo_avg_point_size"] = avgsz
 
 	sz := 0
-	s.cols.Ascend(nil, func(v interface{}) bool {
-		col := v.(*collectionKeyContainer).col
+	s.cols.Scan(func(key string, value interface{}) bool {
+		col := value.(*collection.Collection)
 		sz += col.TotalWeight()
 		return true
 	})
@@ -387,7 +369,7 @@ func (s *Server) writeInfoPersistence(w *bytes.Buffer) {
 	if currentShrinkStart.IsZero() {
 		fmt.Fprintf(w, "aof_current_rewrite_time_sec:0\r\n") // Duration of the on-going AOF rewrite operation if any
 	} else {
-		fmt.Fprintf(w, "aof_current_rewrite_time_sec:%d\r\n", time.Since(currentShrinkStart)/time.Second) // Duration of the on-going AOF rewrite operation if any
+		fmt.Fprintf(w, "aof_current_rewrite_time_sec:%d\r\n", time.Now().Sub(currentShrinkStart)/time.Second) // Duration of the on-going AOF rewrite operation if any
 	}
 }
 
@@ -496,7 +478,7 @@ func (s *Server) cmdInfo(msg *Message) (res resp.Value, err error) {
 		if err != nil {
 			return NOMessage, err
 		}
-		res = resp.StringValue(`{"ok":true,"info":` + string(data) + `,"elapsed":"` + time.Since(start).String() + "\"}")
+		res = resp.StringValue(`{"ok":true,"info":` + string(data) + `,"elapsed":"` + time.Now().Sub(start).String() + "\"}")
 	case RESP:
 		res = resp.BytesValue(w.Bytes())
 	}
@@ -532,4 +514,29 @@ func respValuesSimpleMap(m map[string]interface{}) []resp.Value {
 		vals = append(vals, resp.StringValue(fmt.Sprintf("%v", val)))
 	}
 	return vals
+}
+
+func (s *Server) statsCollections(line string) (string, error) {
+	start := time.Now()
+	var key string
+	var ms = []map[string]interface{}{}
+	for len(line) > 0 {
+		line, key = token(line)
+		col := s.getCol(key)
+		if col != nil {
+			m := make(map[string]interface{})
+			points := col.PointCount()
+			m["num_points"] = points
+			m["in_memory_size"] = col.TotalWeight()
+			m["num_objects"] = col.Count()
+			ms = append(ms, m)
+		} else {
+			ms = append(ms, nil)
+		}
+	}
+	data, err := json.Marshal(ms)
+	if err != nil {
+		return "", err
+	}
+	return `{"ok":true,"stats":` + string(data) + `,"elapsed":"` + time.Now().Sub(start).String() + "\"}", nil
 }

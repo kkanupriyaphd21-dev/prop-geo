@@ -56,24 +56,20 @@ func tableConcat(L *LState) int {
 	j := L.OptInt(4, tbl.Len())
 	if L.GetTop() == 3 {
 		if i > tbl.Len() || i < 1 {
-			L.Push(emptyLString)
+			L.Push(LString(""))
 			return 1
 		}
 	}
 	i = intMax(intMin(i, tbl.Len()), 1)
 	j = intMin(intMin(j, tbl.Len()), tbl.Len())
 	if i > j {
-		L.Push(emptyLString)
+		L.Push(LString(""))
 		return 1
 	}
 	//TODO should flushing?
 	retbottom := L.GetTop()
 	for ; i <= j; i++ {
-		v := tbl.RawGetInt(i)
-		if !LVCanConvToString(v) {
-			L.RaiseError("invalid value (%s) at index %d in table for concat", v.Type().String(), i)
-		}
-		L.Push(v)
+		L.Push(tbl.RawGetInt(i))
 		if i != j {
 			L.Push(sep)
 		}

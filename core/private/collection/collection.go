@@ -5,16 +5,16 @@ import (
 
 	"github.com/tidwall/btree"
 	"github.com/tidwall/geoindex"
-	"github.com/tidwall/geoindex/algo"
 	"github.com/tidwall/geojson"
 	"github.com/tidwall/geojson/geo"
 	"github.com/tidwall/geojson/geometry"
-	"github.com/tidwall/rtree"
+	"github.com/tidwall/rbang"
 	"github.com/tidwall/propgeo/internal/deadline"
+	"github.com/tidwall/tinybtree"
 )
 
-// yieldStep forces the iterator to yield goroutine every 256 steps.
-const yieldStep = 256
+// yieldStep forces the iterator to yield goroutine every 255 steps.
+const yieldStep = 255
 
 // Cursor allows for quickly paging through Scan, Within, Intersects, and Nearby
 type Cursor interface {
@@ -27,13 +27,9 @@ type itemT struct {
 	obj geojson.Object
 }
 
-func byID(a, b interface{}) bool {
-	return a.(*itemT).id < b.(*itemT).id
-}
-
-func byValue(a, b interface{}) bool {
-	value1 := a.(*itemT).obj.String()
-	value2 := b.(*itemT).obj.String()
+func (item *itemT) Less(other btree.Item, ctx interface{}) bool {
+	value1 := item.obj.String()
+	value2 := other.(*itemT).obj.String()
 	if value1 < value2 {
 		return true
 	}
@@ -41,12 +37,12 @@ func byValue(a, b interface{}) bool {
 		return false
 	}
 	// the values match so we'll compare IDs, which are always unique.
-	return byID(a, b)
+	return item.id < other.(*itemT).id
 }
 
 // Collection represents a collection of geojson objects.
 type Collection struct {
-	items       *btree.BTree    // items sorted by keys
+	items       tinybtree.BTree // items sorted by keys
 	index       *geoindex.Index // items geospatially indexed
 	values      *btree.BTree    // items sorted by value+key
 	fieldMap    map[string]int
@@ -58,12 +54,13 @@ type Collection struct {
 	nobjects    int // non-geometry count
 }
 
+var counter uint64
+
 // New creates an empty collection
 func New() *Collection {
 	col := &Collection{
-		items:    btree.New(byID),
-		index:    geoindex.Wrap(&rtree.RTree{}),
-		values:   btree.New(byValue),
+		index:    geoindex.Wrap(&rbang.RTree{}),
+		values:   btree.New(32, nil),
 		fieldMap: make(map[string]int),
 		fieldArr: make([]string, 0),
 	}
@@ -162,8 +159,8 @@ func (c *Collection) Set(
 	newItem := &itemT{id: id, obj: obj}
 
 	// add the new item to main btree and remove the old one if needed
-	oldItem := c.items.Set(newItem)
-	if oldItem != nil {
+	oldItem, ok := c.items.Set(id, newItem)
+	if ok {
 		oldItem := oldItem.(*itemT)
 		// the old item was removed, now let's remove it from the rtree/btree.
 		if objIsSpatial(oldItem.obj) {
@@ -190,7 +187,7 @@ func (c *Collection) Set(
 		c.indexInsert(newItem)
 		c.objects++
 	} else {
-		c.values.Set(newItem)
+		c.values.ReplaceOrInsert(newItem)
 		c.nobjects++
 	}
 
@@ -223,8 +220,8 @@ func (c *Collection) Set(
 func (c *Collection) Delete(id string) (
 	obj geojson.Object, fields []float64, ok bool,
 ) {
-	oldItemV := c.items.Delete(&itemT{id: id})
-	if oldItemV == nil {
+	oldItemV, ok := c.items.Delete(id)
+	if !ok {
 		return nil, nil, false
 	}
 	oldItem := oldItemV.(*itemT)
@@ -250,8 +247,8 @@ func (c *Collection) Delete(id string) (
 func (c *Collection) Get(id string) (
 	obj geojson.Object, fields []float64, ok bool,
 ) {
-	itemV := c.items.Get(&itemT{id: id})
-	if itemV == nil {
+	itemV, ok := c.items.Get(id)
+	if !ok {
 		return nil, nil, false
 	}
 	item := itemV.(*itemT)
@@ -263,8 +260,8 @@ func (c *Collection) Get(id string) (
 func (c *Collection) SetField(id, field string, value float64) (
 	obj geojson.Object, fields []float64, updated bool, ok bool,
 ) {
-	itemV := c.items.Get(&itemT{id: id})
-	if itemV == nil {
+	itemV, ok := c.items.Get(id)
+	if !ok {
 		return nil, nil, false, false
 	}
 	item := itemV.(*itemT)
@@ -276,8 +273,8 @@ func (c *Collection) SetField(id, field string, value float64) (
 func (c *Collection) SetFields(
 	id string, inFields []string, inValues []float64,
 ) (obj geojson.Object, fields []float64, updatedCount int, ok bool) {
-	itemV := c.items.Get(&itemT{id: id})
-	if itemV == nil {
+	itemV, ok := c.items.Get(id)
+	if !ok {
 		return nil, nil, 0, false
 	}
 	item := itemV.(*itemT)
@@ -359,20 +356,20 @@ func (c *Collection) Scan(
 		offset = cursor.Offset()
 		cursor.Step(offset)
 	}
-	iter := func(item interface{}) bool {
+	iter := func(key string, value interface{}) bool {
 		count++
 		if count <= offset {
 			return true
 		}
 		nextStep(count, cursor, deadline)
-		iitm := item.(*itemT)
+		iitm := value.(*itemT)
 		keepon = iterator(iitm.id, iitm.obj, c.getFieldValues(iitm.id))
 		return keepon
 	}
 	if desc {
-		c.items.Descend(nil, iter)
+		c.items.Reverse(iter)
 	} else {
-		c.items.Ascend(nil, iter)
+		c.items.Scan(iter)
 	}
 	return keepon
 }
@@ -392,19 +389,18 @@ func (c *Collection) ScanRange(
 		offset = cursor.Offset()
 		cursor.Step(offset)
 	}
-	iter := func(value interface{}) bool {
-		item := value.(*itemT)
+	iter := func(key string, value interface{}) bool {
 		count++
 		if count <= offset {
 			return true
 		}
 		nextStep(count, cursor, deadline)
 		if !desc {
-			if item.id >= end {
+			if key >= end {
 				return false
 			}
 		} else {
-			if item.id <= end {
+			if key <= end {
 				return false
 			}
 		}
@@ -414,9 +410,9 @@ func (c *Collection) ScanRange(
 	}
 
 	if desc {
-		c.items.Descend(&itemT{id: start}, iter)
+		c.items.Descend(start, iter)
 	} else {
-		c.items.Ascend(&itemT{id: start}, iter)
+		c.items.Ascend(start, iter)
 	}
 	return keepon
 }
@@ -435,7 +431,7 @@ func (c *Collection) SearchValues(
 		offset = cursor.Offset()
 		cursor.Step(offset)
 	}
-	iter := func(item interface{}) bool {
+	iter := func(item btree.Item) bool {
 		count++
 		if count <= offset {
 			return true
@@ -446,9 +442,9 @@ func (c *Collection) SearchValues(
 		return keepon
 	}
 	if desc {
-		c.values.Descend(nil, iter)
+		c.values.Descend(iter)
 	} else {
-		c.values.Ascend(nil, iter)
+		c.values.Ascend(iter)
 	}
 	return keepon
 }
@@ -466,7 +462,7 @@ func (c *Collection) SearchValuesRange(start, end string, desc bool,
 		offset = cursor.Offset()
 		cursor.Step(offset)
 	}
-	iter := func(item interface{}) bool {
+	iter := func(item btree.Item) bool {
 		count++
 		if count <= offset {
 			return true
@@ -476,23 +472,15 @@ func (c *Collection) SearchValuesRange(start, end string, desc bool,
 		keepon = iterator(iitm.id, iitm.obj, c.getFieldValues(iitm.id))
 		return keepon
 	}
-	pstart := &itemT{obj: String(start)}
-	pend := &itemT{obj: String(end)}
 	if desc {
-		// descend range
-		c.values.Descend(pstart, func(item interface{}) bool {
-			return bGT(c.values, item, pend) && iter(item)
-		})
+		c.values.DescendRange(&itemT{obj: String(start)},
+			&itemT{obj: String(end)}, iter)
 	} else {
-		c.values.Ascend(pstart, func(item interface{}) bool {
-			return bLT(c.values, item, pend) && iter(item)
-		})
+		c.values.AscendRange(&itemT{obj: String(start)},
+			&itemT{obj: String(end)}, iter)
 	}
 	return keepon
 }
-
-func bLT(tr *btree.BTree, a, b interface{}) bool { return tr.Less(a, b) }
-func bGT(tr *btree.BTree, a, b interface{}) bool { return tr.Less(b, a) }
 
 // ScanGreaterOrEqual iterates though the collection starting with specified id.
 func (c *Collection) ScanGreaterOrEqual(id string, desc bool,
@@ -507,7 +495,7 @@ func (c *Collection) ScanGreaterOrEqual(id string, desc bool,
 		offset = cursor.Offset()
 		cursor.Step(offset)
 	}
-	iter := func(value interface{}) bool {
+	iter := func(key string, value interface{}) bool {
 		count++
 		if count <= offset {
 			return true
@@ -518,9 +506,9 @@ func (c *Collection) ScanGreaterOrEqual(id string, desc bool,
 		return keepon
 	}
 	if desc {
-		c.items.Descend(&itemT{id: id}, iter)
+		c.items.Descend(id, iter)
 	} else {
-		c.items.Ascend(&itemT{id: id}, iter)
+		c.items.Ascend(id, iter)
 	}
 	return keepon
 }
@@ -572,19 +560,19 @@ func (c *Collection) geoSparseInner(
 		w := rect.Max.X - rect.Min.X
 		h := rect.Max.Y - rect.Min.Y
 		quads := [4]geometry.Rect{
-			{
+			geometry.Rect{
 				Min: geometry.Point{X: rect.Min.X, Y: rect.Min.Y + h/2},
 				Max: geometry.Point{X: rect.Min.X + w/2, Y: rect.Max.Y},
 			},
-			{
+			geometry.Rect{
 				Min: geometry.Point{X: rect.Min.X + w/2, Y: rect.Min.Y + h/2},
 				Max: geometry.Point{X: rect.Max.X, Y: rect.Max.Y},
 			},
-			{
+			geometry.Rect{
 				Min: geometry.Point{X: rect.Min.X, Y: rect.Min.Y},
 				Max: geometry.Point{X: rect.Min.X + w/2, Y: rect.Min.Y + h/2},
 			},
-			{
+			geometry.Rect{
 				Min: geometry.Point{X: rect.Min.X + w/2, Y: rect.Min.Y},
 				Max: geometry.Point{X: rect.Max.X, Y: rect.Min.Y + h/2},
 			},
@@ -744,10 +732,10 @@ func (c *Collection) Nearby(
 		cursor.Step(offset)
 	}
 	c.index.Nearby(
-		algo.Box(
+		geoindex.SimpleBoxAlgo(
 			[2]float64{center.X, center.Y},
 			[2]float64{center.X, center.Y},
-			false, nil),
+		),
 		func(_, _ [2]float64, itemv interface{}, _ float64) bool {
 			count++
 			if count <= offset {
@@ -763,7 +751,7 @@ func (c *Collection) Nearby(
 }
 
 func nextStep(step uint64, cursor Cursor, deadline *deadline.Deadline) {
-	if step&(yieldStep-1) == (yieldStep - 1) {
+	if step&yieldStep == yieldStep {
 		runtime.Gosched()
 		deadline.Check()
 	}

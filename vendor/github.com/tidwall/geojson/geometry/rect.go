@@ -115,7 +115,10 @@ func (rect Rect) Empty() bool {
 
 // Valid ...
 func (rect Rect) Valid() bool {
-	return rect.Min.Valid() && rect.Max.Valid()
+	if !WorldPolygon.ContainsRect(rect) {
+		return false
+	}
+	return true
 }
 
 // Rect ...

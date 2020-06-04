@@ -46,11 +46,7 @@ func channelSelect(L *LState) int {
 	cases := make([]reflect.SelectCase, L.GetTop())
 	top := L.GetTop()
 	for i := 0; i < top; i++ {
-		cas := reflect.SelectCase{
-			Dir:  reflect.SelectSend,
-			Chan: reflect.ValueOf(nil),
-			Send: reflect.ValueOf(nil),
-		}
+		cas := reflect.SelectCase{reflect.SelectSend, reflect.ValueOf(nil), reflect.ValueOf(nil)}
 		tbl := L.CheckTable(i + 1)
 		dir, ok1 := tbl.RawGetInt(1).(LString)
 		if !ok1 {
@@ -83,20 +79,7 @@ func channelSelect(L *LState) int {
 		cases[i] = cas
 	}
 
-	if L.ctx != nil {
-		cases = append(cases, reflect.SelectCase{
-			Dir:  reflect.SelectRecv,
-			Chan: reflect.ValueOf(L.ctx.Done()),
-			Send: reflect.ValueOf(nil),
-		})
-	}
-
 	pos, recv, rok := reflect.Select(cases)
-
-	if L.ctx != nil && pos == L.GetTop() {
-		return 0
-	}
-
 	lv := LNil
 	if recv.Kind() != 0 {
 		lv, _ = recv.Interface().(LValue)
@@ -142,22 +125,7 @@ var channelMethods = map[string]LGFunction{
 
 func channelReceive(L *LState) int {
 	rch := checkChannel(L, 1)
-	var v reflect.Value
-	var ok bool
-	if L.ctx != nil {
-		cases := []reflect.SelectCase{{
-			Dir:  reflect.SelectRecv,
-			Chan: reflect.ValueOf(L.ctx.Done()),
-			Send: reflect.ValueOf(nil),
-		}, {
-			Dir:  reflect.SelectRecv,
-			Chan: rch,
-			Send: reflect.ValueOf(nil),
-		}}
-		_, v, ok = reflect.Select(cases)
-	} else {
-		v, ok = rch.Recv()
-	}
+	v, ok := rch.Recv()
 	if ok {
 		L.Push(LTrue)
 		L.Push(v.Interface().(LValue))

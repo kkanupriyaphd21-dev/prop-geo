@@ -482,7 +482,7 @@ func (s *Server) cmdEvalUnified(scriptIsSha bool, msg *Message) (res resp.Value,
 		var buf bytes.Buffer
 		buf.WriteString(`{"ok":true`)
 		buf.WriteString(`,"result":` + ConvertToJSON(ret))
-		buf.WriteString(`,"elapsed":"` + time.Since(start).String() + "\"}")
+		buf.WriteString(`,"elapsed":"` + time.Now().Sub(start).String() + "\"}")
 		return resp.StringValue(buf.String()), nil
 	case RESP:
 		return ConvertToRESP(ret), nil
@@ -496,7 +496,7 @@ func (s *Server) cmdScriptLoad(msg *Message) (resp.Value, error) {
 
 	var ok bool
 	var script string
-	if _, script, ok = tokenval(vs); !ok || script == "" {
+	if vs, script, ok = tokenval(vs); !ok || script == "" {
 		return NOMessage, errInvalidNumberOfArguments
 	}
 
@@ -519,7 +519,7 @@ func (s *Server) cmdScriptLoad(msg *Message) (resp.Value, error) {
 		var buf bytes.Buffer
 		buf.WriteString(`{"ok":true`)
 		buf.WriteString(`,"result":"` + shaSum + `"`)
-		buf.WriteString(`,"elapsed":"` + time.Since(start).String() + "\"}")
+		buf.WriteString(`,"elapsed":"` + time.Now().Sub(start).String() + "\"}")
 		return resp.StringValue(buf.String()), nil
 	case RESP:
 		return resp.StringValue(shaSum), nil
@@ -557,7 +557,7 @@ func (s *Server) cmdScriptExists(msg *Message) (resp.Value, error) {
 			resArray = append(resArray, fmt.Sprintf("%d", ires))
 		}
 		buf.WriteString(`,"result":[` + strings.Join(resArray, ",") + `]`)
-		buf.WriteString(`,"elapsed":"` + time.Since(start).String() + "\"}")
+		buf.WriteString(`,"elapsed":"` + time.Now().Sub(start).String() + "\"}")
 		return resp.StringValue(buf.String()), nil
 	case RESP:
 		var resArray []resp.Value
@@ -577,7 +577,7 @@ func (s *Server) cmdScriptFlush(msg *Message) (resp.Value, error) {
 	case JSON:
 		var buf bytes.Buffer
 		buf.WriteString(`{"ok":true`)
-		buf.WriteString(`,"elapsed":"` + time.Since(start).String() + "\"}")
+		buf.WriteString(`,"elapsed":"` + time.Now().Sub(start).String() + "\"}")
 		return resp.StringValue(buf.String()), nil
 	case RESP:
 		return resp.StringValue("OK"), nil
@@ -642,7 +642,6 @@ func (s *Server) commandInScript(msg *Message) (
 	case "server":
 		res, err = s.cmdServer(msg)
 	}
-	s.sendMonitor(err, msg, nil, true)
 	return
 }
 

@@ -36,18 +36,17 @@ func (s *Server) cmdKeys(msg *Message) (res resp.Value, err error) {
 	var greaterPivot string
 	var vals []resp.Value
 
-	iterator := func(v interface{}) bool {
-		vcol := v.(*collectionKeyContainer)
+	iterator := func(key string, value interface{}) bool {
 		var match bool
 		if everything {
 			match = true
 		} else if greater {
-			if !strings.HasPrefix(vcol.key, greaterPivot) {
+			if !strings.HasPrefix(key, greaterPivot) {
 				return false
 			}
 			match = true
 		} else {
-			match, _ = glob.Match(pattern, vcol.key)
+			match, _ = glob.Match(pattern, key)
 		}
 		if match {
 			if once {
@@ -59,9 +58,9 @@ func (s *Server) cmdKeys(msg *Message) (res resp.Value, err error) {
 			}
 			switch msg.OutputType {
 			case JSON:
-				wr.WriteString(jsonString(vcol.key))
+				wr.WriteString(jsonString(key))
 			case RESP:
-				vals = append(vals, resp.StringValue(vcol.key))
+				vals = append(vals, resp.StringValue(key))
 			}
 
 			// If no more than one match is expected, stop searching
@@ -75,20 +74,20 @@ func (s *Server) cmdKeys(msg *Message) (res resp.Value, err error) {
 	// TODO: This can be further optimized by using glob.Parse and limits
 	if pattern == "*" {
 		everything = true
-		s.cols.Ascend(nil, iterator)
+		s.cols.Scan(iterator)
 	} else if strings.HasSuffix(pattern, "*") {
 		greaterPivot = pattern[:len(pattern)-1]
 		if glob.IsGlob(greaterPivot) {
-			s.cols.Ascend(nil, iterator)
+			s.cols.Scan(iterator)
 		} else {
 			greater = true
-			s.cols.Ascend(&collectionKeyContainer{key: greaterPivot}, iterator)
+			s.cols.Ascend(greaterPivot, iterator)
 		}
 	} else {
-		s.cols.Ascend(nil, iterator)
+		s.cols.Scan(iterator)
 	}
 	if msg.OutputType == JSON {
-		wr.WriteString(`],"elapsed":"` + time.Since(start).String() + "\"}")
+		wr.WriteString(`],"elapsed":"` + time.Now().Sub(start).String() + "\"}")
 		return resp.StringValue(wr.String()), nil
 	}
 	return resp.ArrayValue(vals), nil

@@ -52,6 +52,35 @@ func tokenvalbytes(vs []string) (nvs []string, token []byte, ok bool) {
 	return
 }
 
+func tokenlc(line string) (newLine, token string) {
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
+		if ch == ' ' {
+			return line[i+1:], line[:i]
+		}
+		if ch >= 'A' && ch <= 'Z' {
+			lc := make([]byte, 0, 16)
+			if i > 0 {
+				lc = append(lc, []byte(line[:i])...)
+			}
+			lc = append(lc, ch+32)
+			i++
+			for ; i < len(line); i++ {
+				ch = line[i]
+				if ch == ' ' {
+					return line[i+1:], string(lc)
+				}
+				if ch >= 'A' && ch <= 'Z' {
+					lc = append(lc, ch+32)
+				} else {
+					lc = append(lc, ch)
+				}
+			}
+			return "", string(lc)
+		}
+	}
+	return "", line
+}
 func lcb(s1 []byte, s2 string) bool {
 	if len(s1) != len(s2) {
 		return false
@@ -113,6 +142,19 @@ func (where whereT) match(value float64) bool {
 		}
 	}
 	return true
+}
+
+func zMinMaxFromWheres(wheres []whereT) (minZ, maxZ float64) {
+	for _, w := range wheres {
+		if w.field == "z" {
+			minZ = w.min
+			maxZ = w.max
+			return
+		}
+	}
+	minZ = math.Inf(-1)
+	maxZ = math.Inf(+1)
+	return
 }
 
 type whereinT struct {
@@ -188,6 +230,7 @@ type searchScanBaseTokens struct {
 	cursor     uint64
 	output     outputT
 	precision  uint64
+	lineout    string
 	fence      bool
 	distance   bool
 	nodwell    bool
@@ -619,8 +662,7 @@ func (s *Server) parseSearchScanBaseTokens(
 		}
 	}
 	if sprecision != "" {
-		t.precision, err = strconv.ParseUint(sprecision, 10, 64)
-		if err != nil || t.precision == 0 || t.precision > 12 {
+		if t.precision, err = strconv.ParseUint(sprecision, 10, 64); err != nil || t.precision == 0 || t.precision > 64 {
 			err = errInvalidArgument(sprecision)
 			return
 		}

@@ -38,7 +38,8 @@ func (server *Server) aofshrink() {
 		server.shrinking = false
 		server.shrinklog = nil
 		server.mu.Unlock()
-		log.Infof("aof shrink ended %v", time.Since(start))
+		log.Infof("aof shrink ended %v", time.Now().Sub(start))
+		return
 	}()
 
 	err := func() error {
@@ -93,7 +94,6 @@ func (server *Server) aofshrink() {
 						return
 					}
 					var fnames = col.FieldArr() // reload an array of field names to match each object
-					var fmap = col.FieldMap()   //
 					var exm *rhh.Map            // the expiration map
 					if value, ok := server.expires.Get(keys[0]); ok {
 						exm = value.(*rhh.Map)
@@ -114,14 +114,11 @@ func (server *Server) aofshrink() {
 							values = append(values, "set")
 							values = append(values, keys[0])
 							values = append(values, id)
-							if len(fields) > 0 {
-								fvs := orderFields(fmap, fnames, fields)
-								for _, fv := range fvs {
-									if fv.value != 0 {
-										values = append(values, "field")
-										values = append(values, fv.field)
-										values = append(values, strconv.FormatFloat(fv.value, 'f', -1, 64))
-									}
+							for i, fvalue := range fields {
+								if fvalue != 0 {
+									values = append(values, "field")
+									values = append(values, fnames[i])
+									values = append(values, strconv.FormatFloat(fvalue, 'f', -1, 64))
 								}
 							}
 							if exm != nil {
@@ -198,16 +195,20 @@ func (server *Server) aofshrink() {
 				} else {
 					values = append(values, "sethook", name,
 						strings.Join(hook.Endpoints, ","))
+					values = append(values)
 				}
 				for _, meta := range hook.Metas {
 					values = append(values, "meta", meta.Name, meta.Value)
 				}
 				if !hook.expires.IsZero() {
-					ex := float64(time.Until(hook.expires)) / float64(time.Second)
+					ex := float64(hook.expires.Sub(time.Now())) /
+						float64(time.Second)
 					values = append(values, "ex",
 						strconv.FormatFloat(ex, 'f', 1, 64))
 				}
-				values = append(values, hook.Message.Args...)
+				for _, value := range hook.Message.Args {
+					values = append(values, value)
+				}
 				// append the values to the aof buffer
 				aofbuf = append(aofbuf, '*')
 				aofbuf = append(aofbuf, strconv.FormatInt(int64(len(values)), 10)...)

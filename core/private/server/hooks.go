@@ -109,9 +109,7 @@ func (s *Server) cmdSetHook(msg *Message, chanCmd bool) (
 		break
 	}
 	args, err := s.cmdSearchArgs(true, cmdlc, vs, types)
-	if args.usingLua() {
-		defer args.Close()
-	}
+	defer args.Close()
 	if err != nil {
 		return NOMessage, d, err
 	}
@@ -199,12 +197,6 @@ func (s *Server) cmdSetHook(msg *Message, chanCmd bool) (
 			[2]float64{rect.Min.X, rect.Min.Y},
 			[2]float64{rect.Max.X, rect.Max.Y},
 			prevHook)
-		if prevHook.Fence.detect["cross"] {
-			s.hookCross.Delete(
-				[2]float64{rect.Min.X, rect.Min.Y},
-				[2]float64{rect.Max.X, rect.Max.Y},
-				prevHook)
-		}
 	}
 	// add hook to spatial index
 	if hook != nil && hook.Fence != nil && hook.Fence.obj != nil {
@@ -213,12 +205,6 @@ func (s *Server) cmdSetHook(msg *Message, chanCmd bool) (
 			[2]float64{rect.Min.X, rect.Min.Y},
 			[2]float64{rect.Max.X, rect.Max.Y},
 			hook)
-		if hook.Fence.detect["cross"] {
-			s.hookCross.Insert(
-				[2]float64{rect.Min.X, rect.Min.Y},
-				[2]float64{rect.Max.X, rect.Max.Y},
-				hook)
-		}
 	}
 
 	hook.Open() // Opens a goroutine to notify the hook
@@ -254,18 +240,12 @@ func (s *Server) cmdDelHook(msg *Message, chanCmd bool) (
 		delete(s.hooks, hook.Name)
 		delete(s.hooksOut, hook.Name)
 		// remove hook from spatial index
-		if hook.Fence != nil && hook.Fence.obj != nil {
+		if hook != nil && hook.Fence != nil && hook.Fence.obj != nil {
 			rect := hook.Fence.obj.Rect()
 			s.hookTree.Delete(
 				[2]float64{rect.Min.X, rect.Min.Y},
 				[2]float64{rect.Max.X, rect.Max.Y},
 				hook)
-			if hook.Fence.detect["cross"] {
-				s.hookCross.Delete(
-					[2]float64{rect.Min.X, rect.Min.Y},
-					[2]float64{rect.Max.X, rect.Max.Y},
-					hook)
-			}
 		}
 		d.updated = true
 	}
@@ -312,18 +292,12 @@ func (s *Server) cmdPDelHook(msg *Message, channel bool) (
 		delete(s.hooks, hook.Name)
 		delete(s.hooksOut, hook.Name)
 		// remove hook from spatial index
-		if hook.Fence != nil && hook.Fence.obj != nil {
+		if hook != nil && hook.Fence != nil && hook.Fence.obj != nil {
 			rect := hook.Fence.obj.Rect()
 			s.hookTree.Delete(
 				[2]float64{rect.Min.X, rect.Min.Y},
 				[2]float64{rect.Max.X, rect.Max.Y},
 				hook)
-			if hook.Fence.detect["cross"] {
-				s.hookCross.Delete(
-					[2]float64{rect.Min.X, rect.Min.Y},
-					[2]float64{rect.Max.X, rect.Max.Y},
-					hook)
-			}
 		}
 		d.updated = true
 		count++
@@ -441,7 +415,7 @@ func (s *Server) cmdHooks(msg *Message, channel bool) (
 			buf.WriteString(`}}`)
 		}
 		buf.WriteString(`],"elapsed":"` +
-			time.Since(start).String() + "\"}")
+			time.Now().Sub(start).String() + "\"}")
 		return resp.StringValue(buf.String()), nil
 	case RESP:
 		var vals []resp.Value

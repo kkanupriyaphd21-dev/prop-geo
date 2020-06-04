@@ -49,11 +49,7 @@ type Scanner struct {
 
 func NewScanner(reader io.Reader, source string) *Scanner {
 	return &Scanner{
-		Pos: ast.Position{
-			Source: source,
-			Line:   1,
-			Column: 0,
-		},
+		Pos:    ast.Position{source, 1, 0},
 		reader: bufio.NewReaderSize(reader, 4096),
 	}
 }
@@ -237,7 +233,9 @@ func (sc *Scanner) scanEscape(ch int, buf *bytes.Buffer) error {
 			val, _ := strconv.ParseInt(string(bytes), 10, 32)
 			writeChar(buf, int(val))
 		} else {
+			buf.WriteByte('\\')
 			writeChar(buf, ch)
+			return sc.Error(buf.String(), "Invalid escape sequence")
 		}
 	}
 	return nil
@@ -302,8 +300,6 @@ redo:
 
 	if ch == '(' && lexer.PrevTokenType == ')' {
 		lexer.PNewLine = newline
-	} else {
-		lexer.PNewLine = false
 	}
 
 	var _buf bytes.Buffer

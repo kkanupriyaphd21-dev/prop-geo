@@ -60,7 +60,6 @@ type Series interface {
 	SegmentAt(index int) Segment
 	Search(rect Rect, iter func(seg Segment, index int) bool)
 	Index() interface{}
-	Valid() bool
 }
 
 func seriesCopyPoints(series Series) []Point {
@@ -139,12 +138,13 @@ func (series *baseSeries) Empty() bool {
 
 // Valid ...
 func (series *baseSeries) Valid() bool {
+	valid := true
 	for _, point := range series.points {
 		if !point.Valid() {
-			return false
+			valid = false
 		}
 	}
-	return true
+	return valid
 }
 
 // Rect returns the series rectangle

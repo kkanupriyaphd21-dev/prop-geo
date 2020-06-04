@@ -15,9 +15,6 @@
 package mqtt
 
 import (
-	"net/url"
-	"sync"
-
 	"github.com/eclipse/paho.mqtt.golang/packets"
 )
 
@@ -31,7 +28,6 @@ type Message interface {
 	Topic() string
 	MessageID() uint16
 	Payload() []byte
-	Ack()
 }
 
 type message struct {
@@ -41,8 +37,6 @@ type message struct {
 	topic     string
 	messageID uint16
 	payload   []byte
-	once      sync.Once
-	ack       func()
 }
 
 func (m *message) Duplicate() bool {
@@ -69,11 +63,7 @@ func (m *message) Payload() []byte {
 	return m.payload
 }
 
-func (m *message) Ack() {
-	m.once.Do(m.ack)
-}
-
-func messageFromPublish(p *packets.PublishPacket, ack func()) Message {
+func messageFromPublish(p *packets.PublishPacket) Message {
 	return &message{
 		duplicate: p.Dup,
 		qos:       p.Qos,
@@ -81,11 +71,10 @@ func messageFromPublish(p *packets.PublishPacket, ack func()) Message {
 		topic:     p.TopicName,
 		messageID: p.MessageID,
 		payload:   p.Payload,
-		ack:       ack,
 	}
 }
 
-func newConnectMsgFromOptions(options *ClientOptions, broker *url.URL) *packets.ConnectPacket {
+func newConnectMsgFromOptions(options *ClientOptions) *packets.ConnectPacket {
 	m := packets.NewControlPacket(packets.Connect).(*packets.ConnectPacket)
 
 	m.CleanSession = options.CleanSession
@@ -99,29 +88,17 @@ func newConnectMsgFromOptions(options *ClientOptions, broker *url.URL) *packets.
 		m.WillMessage = options.WillPayload
 	}
 
-	username := options.Username
-	password := options.Password
-	if broker.User != nil {
-		username = broker.User.Username()
-		if pwd, ok := broker.User.Password(); ok {
-			password = pwd
-		}
-	}
-	if options.CredentialsProvider != nil {
-		username, password = options.CredentialsProvider()
-	}
-
-	if username != "" {
+	if options.Username != "" {
 		m.UsernameFlag = true
-		m.Username = username
-		// mustn't have password without user as well
-		if password != "" {
+		m.Username = options.Username
+		//mustn't have password without user as well
+		if options.Password != "" {
 			m.PasswordFlag = true
-			m.Password = []byte(password)
+			m.Password = []byte(options.Password)
 		}
 	}
 
-	m.Keepalive = uint16(options.KeepAlive)
+	m.Keepalive = uint16(options.KeepAlive.Seconds())
 
 	return m
 }

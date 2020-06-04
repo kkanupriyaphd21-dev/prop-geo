@@ -61,8 +61,9 @@ func showHelp() bool {
 	}
 	fmt.Fprintf(os.Stdout, "propgeo-cli %s%s\n\n", core.Version, gitsha)
 	fmt.Fprintf(os.Stdout, "Usage: propgeo-cli [OPTIONS] [cmd [arg [arg ...]]]\n")
-	fmt.Fprintf(os.Stdout, " --raw              Use raw formatting for replies\n")
+	fmt.Fprintf(os.Stdout, " --raw              Use raw formatting for replies (default when STDOUT is not a tty)\n")
 	fmt.Fprintf(os.Stdout, " --noprompt         Do not display a prompt\n")
+	fmt.Fprintf(os.Stdout, " --tty              Force TTY\n")
 	fmt.Fprintf(os.Stdout, " --resp             Use RESP output formatting (default is JSON output)\n")
 	fmt.Fprintf(os.Stdout, " --json             Use JSON output formatting (default is JSON output)\n")
 	fmt.Fprintf(os.Stdout, " -h <hostname>      Server hostname (default: %s)\n", hostname)
@@ -145,6 +146,14 @@ func main() {
 		return
 	}
 
+	if !raw && !tty && runtime.GOOS != "windows" {
+		fi, err := os.Stdout.Stat()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			return
+		}
+		raw = (fi.Mode() & os.ModeCharDevice) == 0
+	}
 	if len(oneCommand) > 0 && (oneCommand[0] == 'h' || oneCommand[0] == 'H') && strings.Split(strings.ToLower(oneCommand), " ")[0] == "help" {
 		showHelp()
 		return
@@ -171,7 +180,6 @@ func main() {
 		}
 	}
 	connDial()
-	monitor := false
 	livemode := false
 	aof := false
 	defer func() {
@@ -268,6 +276,13 @@ func main() {
 		}
 	}()
 	for {
+		if conn == nil {
+			connDial()
+			if conn == nil {
+				continue
+			}
+		}
+
 		var command string
 		var err error
 		if oneCommand == "" {
@@ -344,10 +359,6 @@ func main() {
 					if jsonOK(msg) {
 						output = "json"
 					}
-				case "monitor":
-					monitor = true
-					livemode = true
-					output = "resp"
 				}
 				if output == "resp" &&
 					(strings.HasPrefix(string(msg), "*3\r\n$10\r\npsubscribe\r\n") ||
@@ -371,7 +382,7 @@ func main() {
 				}
 
 				mustOutput := true
-				if !monitor && oneCommand == "" && output == "json" && !jsonOK(msg) {
+				if oneCommand == "" && output == "json" && !jsonOK(msg) {
 					var cerr connError
 					if err := json.Unmarshal(msg, &cerr); err == nil {
 						fmt.Fprintln(os.Stderr, "(error) "+cerr.Err)
@@ -481,7 +492,7 @@ func help(arg string) error {
 		}
 		fmt.Fprintf(os.Stderr, `        "quit" to exit`+"\n")
 		if noprompt && tty {
-			fmt.Fprint(os.Stderr, groups)
+			fmt.Fprintf(os.Stderr, groups)
 		}
 		return nil
 	}
@@ -503,7 +514,7 @@ func help(arg string) error {
 	}
 	if showGroups {
 		if noprompt && tty {
-			fmt.Fprint(os.Stderr, groups)
+			fmt.Fprintf(os.Stderr, groups)
 		}
 	} else if !found {
 		if noprompt && tty {

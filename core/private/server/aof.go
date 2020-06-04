@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"os"
 	"sort"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/tidwall/buntdb"
+	"github.com/tidwall/geojson"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/redcon"
 	"github.com/tidwall/resp"
@@ -29,7 +29,9 @@ func (err errAOFHook) Error() string {
 	return fmt.Sprintf("hook: %v", err.err)
 }
 
-func (s *Server) loadAOF() (err error) {
+var errInvalidAOF = errors.New("invalid aof file")
+
+func (s *Server) loadAOF() error {
 	fi, err := s.aof.Stat()
 	if err != nil {
 		return err
@@ -37,7 +39,7 @@ func (s *Server) loadAOF() (err error) {
 	start := time.Now()
 	var count int
 	defer func() {
-		d := time.Since(start)
+		d := time.Now().Sub(start)
 		ps := float64(count) / (float64(d) / float64(time.Second))
 		suf := []string{"bytes/s", "KB/s", "MB/s", "GB/s", "TB/s"}
 		bps := float64(fi.Size()) / (float64(d) / float64(time.Second))
@@ -55,25 +57,12 @@ func (s *Server) loadAOF() (err error) {
 	var buf []byte
 	var args [][]byte
 	var packet [0xFFFF]byte
-	var zeros int
 	for {
 		n, err := s.aof.Read(packet[:])
 		if err != nil {
 			if err == io.EOF {
 				if len(buf) > 0 {
 					return io.ErrUnexpectedEOF
-				}
-				if zeros > 0 {
-					// Trailing zeros in AOF. Truncate the file so it's sane.
-					// See issue #230 for more information. Force a warning.
-					log.Infof("Truncating %d zeros from AOF (issue #230)", zeros)
-					s.aofsz -= zeros
-					if err := s.aof.Truncate(int64(s.aofsz)); err != nil {
-						return err
-					}
-					if _, err := s.aof.Seek(int64(s.aofsz), 0); err != nil {
-						return err
-					}
 				}
 				return nil
 			}
@@ -86,16 +75,6 @@ func (s *Server) loadAOF() (err error) {
 		}
 		var complete bool
 		for {
-			if len(data) > 0 {
-				if data[0] == 0 {
-					zeros++
-					data = data[1:]
-					continue
-				}
-				if zeros > 0 {
-					return clientErrorf("Zeros found in AOF file (issue #230)")
-				}
-			}
 			complete, args, _, data, err = redcon.ReadNextCommand(data, args[:0])
 			if err != nil {
 				return err
@@ -209,7 +188,9 @@ func (s *Server) writeAOF(args []string, d *commandDetails) error {
 		if len(s.lives) > 0 {
 			if d.parent {
 				// queue children
-				s.lstack = append(s.lstack, d.children...)
+				for _, d := range d.children {
+					s.lstack = append(s.lstack, d)
+				}
 			} else {
 				// queue parent
 				s.lstack = append(s.lstack, d)
@@ -222,70 +203,44 @@ func (s *Server) writeAOF(args []string, d *commandDetails) error {
 }
 
 func (s *Server) getQueueCandidates(d *commandDetails) []*Hook {
-	candidates := make(map[*Hook]bool)
+	var candidates []*Hook
 	// add the hooks with "outside" detection
-	for _, hook := range s.hooksOut {
-		if hook.Key == d.key {
-			candidates[hook] = true
+	if len(s.hooksOut) > 0 {
+		for _, hook := range s.hooksOut {
+			if hook.Key == d.key {
+				candidates = append(candidates, hook)
+			}
 		}
 	}
-	// look for candidates that might "cross" geofences
-	if d.oldObj != nil && d.obj != nil && s.hookCross.Len() > 0 {
-		r1, r2 := d.oldObj.Rect(), d.obj.Rect()
-		s.hookCross.Search(
-			[2]float64{
-				math.Min(r1.Min.X, r2.Min.X),
-				math.Min(r1.Min.Y, r2.Min.Y),
-			},
-			[2]float64{
-				math.Max(r1.Max.X, r2.Max.X),
-				math.Max(r1.Max.Y, r2.Max.Y),
-			},
-			func(min, max [2]float64, value interface{}) bool {
-				hook := value.(*Hook)
-				if hook.Key == d.key {
-					candidates[hook] = true
-				}
-				return true
-			})
-	}
-	// look for candidates that overlap the old object
-	if d.oldObj != nil {
-		r1 := d.oldObj.Rect()
+	// search the hook spatial tree
+	for _, obj := range []geojson.Object{d.obj, d.oldObj} {
+		if obj == nil {
+			continue
+		}
+		rect := obj.Rect()
 		s.hookTree.Search(
-			[2]float64{r1.Min.X, r1.Min.Y},
-			[2]float64{r1.Max.X, r1.Max.Y},
-			func(min, max [2]float64, value interface{}) bool {
+			[2]float64{rect.Min.X, rect.Min.Y},
+			[2]float64{rect.Max.X, rect.Max.Y},
+			func(_, _ [2]float64, value interface{}) bool {
 				hook := value.(*Hook)
-				if hook.Key == d.key {
-					candidates[hook] = true
+				if hook.Key != d.key {
+					return true
+				}
+				var found bool
+				for _, candidate := range candidates {
+					if candidate == hook {
+						found = true
+						break
+					}
+				}
+				if !found {
+					candidates = append(candidates, hook)
 				}
 				return true
-			})
+			},
+		)
 	}
-	// look for candidates that overlap the new object
-	if d.obj != nil {
-		r1 := d.obj.Rect()
-		s.hookTree.Search(
-			[2]float64{r1.Min.X, r1.Min.Y},
-			[2]float64{r1.Max.X, r1.Max.Y},
-			func(min, max [2]float64, value interface{}) bool {
-				hook := value.(*Hook)
-				if hook.Key == d.key {
-					candidates[hook] = true
-				}
-				return true
-			})
-	}
-	if len(candidates) == 0 {
-		return nil
-	}
-	// return the candidates as a slice
-	ret := make([]*Hook, 0, len(candidates))
-	for hook := range candidates {
-		ret = append(ret, hook)
-	}
-	return ret
+	return candidates
 }
 
 func (s *Server) queueHooks(d *commandDetails) error {
@@ -440,7 +395,7 @@ func (s *Server) cmdAOFMD5(msg *Message) (res resp.Value, err error) {
 	switch msg.OutputType {
 	case JSON:
 		res = resp.StringValue(
-			fmt.Sprintf(`{"ok":true,"md5":"%s","elapsed":"%s"}`, sum, time.Since(start)))
+			fmt.Sprintf(`{"ok":true,"md5":"%s","elapsed":"%s"}`, sum, time.Now().Sub(start)))
 	case RESP:
 		res = resp.SimpleStringValue(sum)
 	}

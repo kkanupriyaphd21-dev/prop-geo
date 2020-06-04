@@ -183,7 +183,6 @@ type treeItem struct {
 	item     interface{}
 }
 
-//go:nocheckptr
 func (item *treeItem) unsafeNode() *treeNode {
 	return (*treeNode)(unsafe.Pointer(item))
 }

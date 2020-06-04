@@ -15,7 +15,7 @@ enhancements.
 
 ## Supported Go Versions
 
-This library supports two most recent Go release series, currently 1.10 and 1.11.
+This library supports two most recent Go release series, currently 1.8 and 1.9.
 
 
 ## Supported RabbitMQ Versions

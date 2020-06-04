@@ -78,7 +78,8 @@ func (s *Server) cmdMassInsert(msg *Message) (res resp.Value, err error) {
 	docmd := func(args []string) error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		nmsg := *msg
+		var nmsg Message
+		nmsg = *msg
 		nmsg._command = ""
 		nmsg.Args = args
 		_, d, err := s.command(&nmsg, nil)

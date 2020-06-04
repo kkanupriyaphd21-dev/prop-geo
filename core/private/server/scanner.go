@@ -66,7 +66,6 @@ type ScanWriterParams struct {
 	o               geojson.Object
 	fields          []float64
 	distance        float64
-	distOutput      bool // query or fence requested distance output
 	noLock          bool
 	ignoreGlobMatch bool
 	clip            geojson.Object
@@ -401,13 +400,12 @@ func (sw *scanWriter) writeObject(opts ScanWriterParams) bool {
 
 			} else if len(sw.farr) > 0 {
 				jsfields = `,"fields":[`
-				for i, name := range sw.farr {
+				for i := range sw.farr {
 					if i > 0 {
 						jsfields += `,`
 					}
-					j := sw.fmap[name]
-					if j < len(opts.fields) {
-						jsfields += strconv.FormatFloat(opts.fields[j], 'f', -1, 64)
+					if len(opts.fields) > i {
+						jsfields += strconv.FormatFloat(opts.fields[i], 'f', -1, 64)
 					} else {
 						jsfields += "0"
 					}
@@ -434,7 +432,7 @@ func (sw *scanWriter) writeObject(opts ScanWriterParams) bool {
 
 			wr.WriteString(jsfields)
 
-			if opts.distOutput || opts.distance > 0 {
+			if opts.distance > 0 {
 				wr.WriteString(`,"distance":` + strconv.FormatFloat(opts.distance, 'f', -1, 64))
 			}
 
@@ -497,7 +495,7 @@ func (sw *scanWriter) writeObject(opts ScanWriterParams) bool {
 					vals = append(vals, resp.ArrayValue(fvals))
 				}
 			}
-			if opts.distOutput || opts.distance > 0 {
+			if opts.distance > 0 {
 				vals = append(vals, resp.FloatValue(opts.distance))
 			}
 

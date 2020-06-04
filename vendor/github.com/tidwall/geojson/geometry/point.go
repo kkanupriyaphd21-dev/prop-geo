@@ -21,7 +21,10 @@ func (point Point) Empty() bool {
 
 // Valid ...
 func (point Point) Valid() bool {
-	return point.X >= -180 && point.X <= 180 && point.Y >= -90 && point.Y <= 90
+	if !WorldPolygon.ContainsPoint(point) {
+		return false
+	}
+	return true
 }
 
 // Rect ...

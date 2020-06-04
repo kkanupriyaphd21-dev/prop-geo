@@ -1,10 +1,11 @@
 <p align="center">
   <a href="https://propgeo.com"><img 
-    src="/.github/images/logo-light.svg" 
-    width="284" border="0" alt="PropGeo"></a>
+    src="/.github/images/logo.png" 
+    width="284" height="108" border="0" alt="PropGeo"></a>
 </p>
 <p align="center">
-<a href="https://propgeo.com/slack/"><img src="https://img.shields.io/badge/slack-channel-orange.svg" alt="Slack Channel"></a>
+<a href="https://propgeo.com/slack"><img src="https://img.shields.io/badge/slack-channel-orange.svg" alt="Slack Channel"></a>
+<a href="https://travis-ci.org/tidwall/propgeo"><img src="https://travis-ci.org/tidwall/propgeo.svg?branch=master" alt="Build Status"></a>
 <a href="https://hub.docker.com/r/propgeo/propgeo"><img src="https://img.shields.io/badge/docker-ready-blue.svg" alt="Docker Ready"></a>
 </p>
 
@@ -24,7 +25,7 @@ PropGeo is an open source (MIT licensed), in-memory geolocation data store, spat
 - Spatial index with [search](#searching) methods such as Nearby, Within, and Intersects.
 - Realtime [geofencing](#geofencing) through [webhooks](https://propgeo.com/commands/sethook) or [pub/sub channels](#pubsub-channels).
 - Object types of [lat/lon](#latlon-point), [bbox](#bounding-box), [Geohash](#geohash), [GeoJSON](#geojson), [QuadKey](#quadkey), and [XYZ tile](#xyz-tile).
-- Support for lots of [Clients Libraries](#propgeo-client-libraries) written in many different languages.
+- Support for lots of [Clients Libraries](#client-libraries) written in many different languages.
 - Variety of protocols, including [http](#http) (curl), [websockets](#websockets), [telnet](#telnet), and the [Redis RESP](https://redis.io/topics/protocol).
 - Server responses are [RESP](https://redis.io/topics/protocol) or [JSON](https://www.json.org).
 - Full [command line interface](#cli).
@@ -91,20 +92,6 @@ $ ./propgeo-server
 $ ./propgeo-cli
 > help
 ```
-
-#### Prometheus Metrics
-PropGeo can natively export Prometheus metrics by setting the `--metrics-addr` command line flag (disabled by default). This example exposes the HTTP metrics server on port 4321:
-```
-# start server and enable Prometheus metrics, listen on local interface only
-./propgeo-server --metrics-addr=127.0.0.1:4321
-
-# access metrics
-curl http://127.0.0.1:4321/metrics
-```
-If you need to access the `/metrics` endpoint from a different host you'll have to set the flag accordingly, e.g. set it to `0.0.0.0:<<port>>` to listen on all interfaces.
-
-Use the [redis_exporter](https://github.com/oliver006/redis_exporter) for more advanced use cases like extracting key values or running a lua script.
-
 
 ## <a name="cli"></a>Playing with PropGeo
 
@@ -289,9 +276,10 @@ Check out [maptiler.org](http://www.maptiler.org/google-maps-coordinates-tile-bo
 #### QuadKey
 A QuadKey used the same coordinate system as an XYZ tile except that the string representation is a string characters composed of 0, 1, 2, or 3. For a detailed explanation checkout [The Bing Maps Tile System](https://msdn.microsoft.com/en-us/library/bb259689.aspx).
 
+
 ## Network protocols
 
-It's recommended to use a [client library](#propgeo-client-libraries) or the [PropGeo CLI](#running), but there are times when only HTTP is available or when you need to test from a remote terminal. In those cases we provide an HTTP and telnet options.
+It's recommended to use a [client library](#client-libraries) or the [PropGeo CLI](#running), but there are times when only HTTP is available or when you need to test from a remote terminal. In those cases we provide an HTTP and telnet options.
 
 #### HTTP
 One of the simplest ways to call a propgeo command is to use HTTP. From the command line you can use [curl](https://curl.haxx.se/). For example:
@@ -322,25 +310,9 @@ The server will respond in [JSON](https://json.org) or [RESP](https://redis.io/t
 - HTTP and Websockets use JSON. 
 - Telnet and RESP clients use RESP.
 
-## PropGeo Client Libraries
+## Client Libraries
 
-The following clients are built specifically for PropGeo.  
-Clients that support most PropGeo features are marked with a ⭐️.
-
-- ⭐️ Go: [xjem/t38c](https://github.com/xjem/t38c)
-- ⭐️ Node.js: [node-propgeo](https://github.com/phulst/node-propgeo) ([example code](https://github.com/tidwall/propgeo/wiki/Node.js-example-(node-propgeo)))
-- ⭐️ Python: [pyle38](https://github.com/iwpnd/pyle38)
-- Go: [cjkreklow/t38c](https://github.com/cjkreklow/t38c)
-- Python: [pypropgeo](https://github.com/mitghi/pypropgeo)
-- Rust: [nazar](https://github.com/younisshah/nazar)
-- Swift: [Talon](https://github.com/mikekinney/Talon)
-- Java: [propgeo-client-java](https://github.com/jamshidrostami/propgeo-client-java)
-- Java: [propgeo-client](https://github.com/HkMoyun/propgeo-client)
-
-## Redis Client Libraries
-
-PropGeo uses the [Redis RESP](https://redis.io/topics/protocol) protocol natively. 
-Therefore most clients that support basic Redis commands will also support PropGeo.
+PropGeo uses the [Redis RESP](https://redis.io/topics/protocol) protocol natively. Therefore most clients that support basic Redis commands will in turn support PropGeo. Below are a few of the popular clients. 
 
 - C: [hiredis](https://github.com/redis/hiredis)
 - C#: [StackExchange.Redis](https://github.com/StackExchange/StackExchange.Redis)
@@ -352,6 +324,7 @@ Therefore most clients that support basic Redis commands will also support PropG
 - Go: [redigo](https://github.com/gomodule/redigo) ([example code](https://github.com/tidwall/propgeo/wiki/Go-example-(redigo)))
 - Haskell: [hedis](https://github.com/informatikr/hedis)
 - Java: [lettuce](https://github.com/mp911de/lettuce) ([example code](https://github.com/tidwall/propgeo/wiki/Java-example-(lettuce)))
+- Node.js: [node-propgeo](https://github.com/phulst/node-propgeo) ([example code](https://github.com/tidwall/propgeo/wiki/Node.js-example-(node-propgeo)))
 - Node.js: [node_redis](https://github.com/NodeRedis/node_redis) ([example code](https://github.com/tidwall/propgeo/wiki/Node.js-example-(node-redis)))
 - Perl: [perl-redis](https://github.com/PerlRedis/perl-redis)
 - PHP: [tinyredisclient](https://github.com/ptrofimov/tinyredisclient) ([example code](https://github.com/tidwall/propgeo/wiki/PHP-example-(tinyredisclient)))

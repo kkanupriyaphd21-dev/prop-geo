@@ -2,13 +2,13 @@ package geojson
 
 import (
 	"github.com/tidwall/geojson/geometry"
-	"github.com/tidwall/rtree"
+	"github.com/tidwall/rbang"
 )
 
 type collection struct {
 	children []Object
 	extra    *extra
-	tree     *rtree.RTree
+	tree     *rbang.RTree
 	prect    geometry.Rect
 	pempty   bool
 }
@@ -303,7 +303,7 @@ func (g *collection) parseInitRectIndex(opts *ParseOptions) {
 		count++
 	}
 	if count > 0 && opts.IndexChildren != 0 && count >= opts.IndexChildren {
-		g.tree = new(rtree.RTree)
+		g.tree = new(rbang.RTree)
 		for _, child := range g.children {
 			if child.Empty() {
 				continue

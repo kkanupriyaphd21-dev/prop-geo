@@ -99,9 +99,9 @@ func fenceMatch(
 				roamNearbys, roamFaraways =
 					fenceMatchRoam(sw.s, fence, details.id,
 						details.oldObj, details.obj)
-				if len(roamNearbys) == 0 && len(roamFaraways) == 0 {
-					return nil
-				}
+			}
+			if len(roamNearbys) == 0 && len(roamFaraways) == 0 {
+				return nil
 			}
 			detect = "roam"
 		} else {
@@ -172,12 +172,11 @@ func fenceMatch(
 	sw.fullFields = true
 	sw.msg.OutputType = JSON
 	sw.writeObject(ScanWriterParams{
-		id:         details.id,
-		o:          details.obj,
-		fields:     details.fields,
-		noLock:     true,
-		distance:   distance,
-		distOutput: fence.distance,
+		id:       details.id,
+		o:        details.obj,
+		fields:   details.fields,
+		noLock:   true,
+		distance: distance,
 	})
 
 	if sw.wr.Len() == 0 {
@@ -235,12 +234,6 @@ func fenceMatch(
 	case "roam":
 		if len(msgs) > 0 {
 			var nmsgs []string
-			for _, msg := range msgs {
-				cmd := gjson.Get(msg, "command")
-				if cmd.Exists() && cmd.String() != "set" {
-					nmsgs = append(nmsgs, msg)
-				}
-			}
 			for i := range roamNearbys {
 				nmsg := extendRoamMessage(sw, fence,
 					"nearby", msgs[0], roamNearbys[i])
@@ -417,7 +410,7 @@ func fenceMatchRoam(
 		var match bool
 		var j int
 		for ; j < len(newNearbys); j++ {
-			if newNearbys[j].id == oldNearbys[i].id {
+			if newNearbys[i].id == oldNearbys[i].id {
 				match = true
 				break
 			}

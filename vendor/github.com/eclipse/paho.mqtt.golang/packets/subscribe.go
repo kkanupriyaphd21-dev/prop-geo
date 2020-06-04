@@ -6,8 +6,8 @@ import (
 	"io"
 )
 
-// SubscribePacket is an internal representation of the fields of the
-// Subscribe MQTT packet
+//SubscribePacket is an internal representation of the fields of the
+//Subscribe MQTT packet
 type SubscribePacket struct {
 	FixedHeader
 	MessageID uint16
@@ -16,7 +16,10 @@ type SubscribePacket struct {
 }
 
 func (s *SubscribePacket) String() string {
-	return fmt.Sprintf("%s MessageID: %d topics: %s", s.FixedHeader, s.MessageID, s.Topics)
+	str := fmt.Sprintf("%s", s.FixedHeader)
+	str += " "
+	str += fmt.Sprintf("MessageID: %d topics: %s", s.MessageID, s.Topics)
+	return str
 }
 
 func (s *SubscribePacket) Write(w io.Writer) error {
@@ -36,34 +39,24 @@ func (s *SubscribePacket) Write(w io.Writer) error {
 	return err
 }
 
-// Unpack decodes the details of a ControlPacket after the fixed
-// header has been read
+//Unpack decodes the details of a ControlPacket after the fixed
+//header has been read
 func (s *SubscribePacket) Unpack(b io.Reader) error {
-	var err error
-	s.MessageID, err = decodeUint16(b)
-	if err != nil {
-		return err
-	}
+	s.MessageID = decodeUint16(b)
 	payloadLength := s.FixedHeader.RemainingLength - 2
 	for payloadLength > 0 {
-		topic, err := decodeString(b)
-		if err != nil {
-			return err
-		}
+		topic := decodeString(b)
 		s.Topics = append(s.Topics, topic)
-		qos, err := decodeByte(b)
-		if err != nil {
-			return err
-		}
+		qos := decodeByte(b)
 		s.Qoss = append(s.Qoss, qos)
-		payloadLength -= 2 + len(topic) + 1 // 2 bytes of string length, plus string, plus 1 byte for Qos
+		payloadLength -= 2 + len(topic) + 1 //2 bytes of string length, plus string, plus 1 byte for Qos
 	}
 
 	return nil
 }
 
-// Details returns a Details struct containing the Qos and
-// MessageID of this ControlPacket
+//Details returns a Details struct containing the Qos and
+//MessageID of this ControlPacket
 func (s *SubscribePacket) Details() Details {
 	return Details{Qos: 1, MessageID: s.MessageID}
 }

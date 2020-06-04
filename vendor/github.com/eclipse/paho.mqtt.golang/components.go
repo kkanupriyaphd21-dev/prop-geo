@@ -28,5 +28,4 @@ const (
 	TST component = "[test]    "
 	STA component = "[state]   "
 	ERR component = "[error]   "
-	ROU component = "[router]  "
 )

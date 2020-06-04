@@ -26,7 +26,7 @@ func (conn *AMQPConn) Expired() bool {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if !conn.ex {
-		if time.Since(conn.t) > amqpExpiresAfter {
+		if time.Now().Sub(conn.t) > amqpExpiresAfter {
 			conn.ex = true
 			conn.close()
 		}

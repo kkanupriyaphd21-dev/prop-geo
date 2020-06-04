@@ -21,9 +21,23 @@ import (
 	"github.com/tidwall/propgeo/internal/hservice"
 	"github.com/tidwall/propgeo/internal/log"
 	"github.com/tidwall/propgeo/internal/server"
-
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+)
+
+var (
+	dir         string
+	port        int
+	host        string
+	verbose     bool
+	veryVerbose bool
+	devMode     bool
+	quiet       bool
+	pidfile     string
+	cpuprofile  string
+	memprofile  string
+	pprofport   int
+	nohup       bool
 )
 
 // TODO: Set to false in 2.*
@@ -86,7 +100,8 @@ Advanced Options:
   --queuefilename path    : Event queue path (default:data/queue.db)
   --http-transport yes/no : HTTP transport (default: yes)
   --protected-mode yes/no : protected mode (default: yes)
-  --nohup                 : do not exit on SIGHUP
+  --threads num           : number of network threads (default: num cores)
+  --nohup                 : do not exist on SIGHUP
 
 Developer Options:
   --dev                             : enable developer mode
@@ -137,12 +152,7 @@ Developer Options:
 		return
 	}
 
-	var (
-		devMode             bool
-		nohup               bool
-		showEvioDisabled    bool
-		showThreadsDisabled bool
-	)
+	var showEvioDisabled bool
 
 	// parse non standard args.
 	nargs := []string{os.Args[0]}
@@ -220,15 +230,15 @@ Developer Options:
 		case "--threads", "-threads":
 			i++
 			if i < len(os.Args) {
-				_, err := strconv.ParseUint(os.Args[i], 10, 16)
+				n, err := strconv.ParseUint(os.Args[i], 10, 16)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "threads must be a valid number\n")
 					os.Exit(1)
 				}
-				showThreadsDisabled = true
+				core.NumThreads = int(n)
 				continue
 			}
-			fmt.Fprintf(os.Stderr, "threads must be a valid number \n")
+			fmt.Fprintf(os.Stderr, "http-transport must be 'yes' or 'no'\n")
 			os.Exit(1)
 		case "--evio", "-evio":
 			i++
@@ -245,21 +255,6 @@ Developer Options:
 		nargs = append(nargs, os.Args[i])
 	}
 	os.Args = nargs
-
-	metricsAddr := flag.String("metrics-addr", "", "The listening addr for Prometheus metrics.")
-
-	var (
-		dir         string
-		port        int
-		host        string
-		verbose     bool
-		veryVerbose bool
-		quiet       bool
-		pidfile     string
-		cpuprofile  string
-		memprofile  string
-		pprofport   int
-	)
 
 	flag.IntVar(&port, "p", 9851, "The listening port.")
 	flag.StringVar(&pidfile, "pidfile", "", "A file that contains the pid")
@@ -408,7 +403,6 @@ Developer Options:
   |       |       |   propgeo.com
   |_______|_______| 
 `+"\n", core.Version, gitsha, strconv.IntSize, runtime.GOARCH, runtime.GOOS, hostd, port, os.Getpid())
-
 	if pidferr != nil {
 		log.Warnf("pidfile: %v", pidferr)
 	}
@@ -416,11 +410,7 @@ Developer Options:
 		// we don't currently support evio in PropGeo
 		log.Warnf("evio is not currently supported")
 	}
-	if showThreadsDisabled {
-		log.Warnf("thread flag is deprecated use GOMAXPROCS to set number of threads instead")
-	}
-
-	if err := server.Serve(host, port, dir, httpTransport, *metricsAddr); err != nil {
+	if err := server.Serve(host, port, dir, httpTransport); err != nil {
 		log.Fatal(err)
 	}
 }

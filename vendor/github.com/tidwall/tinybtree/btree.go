@@ -1,6 +1,6 @@
 package tinybtree
 
-const maxItems = 255
+const maxItems = 31 // use an odd number
 const minItems = maxItems * 40 / 100
 
 type item struct {
@@ -23,24 +23,19 @@ type BTree struct {
 }
 
 func (n *node) find(key string) (index int, found bool) {
-	low := 0
-	high := n.numItems - 1
-	for low <= high {
-		mid := low + ((high+1)-low)/2
-		if key >= n.items[mid].key {
-			low = mid + 1
+	i, j := 0, n.numItems
+	for i < j {
+		h := i + (j-i)/2
+		if key >= n.items[h].key {
+			i = h + 1
 		} else {
-			high = mid - 1
+			j = h
 		}
 	}
-	if low > 0 && n.items[low-1].key == key {
-		index = low - 1
-		found = true
-	} else {
-		index = low
-		found = false
+	if i > 0 && n.items[i-1].key >= key {
+		return i - 1, true
 	}
-	return index, found
+	return i, false
 }
 
 // Set or replace a value for a key

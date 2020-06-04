@@ -16,17 +16,18 @@
  *
  */
 
+//go:generate protoc --go_out=plugins=grpc:. grpc_testing/test.proto
+
 // Package stats is for collecting and reporting various network and RPC stats.
 // This package is for monitoring purpose only. All fields are read-only.
 // All APIs are experimental.
 package stats // import "google.golang.org/grpc/stats"
 
 import (
-	"context"
 	"net"
 	"time"
 
-	"google.golang.org/grpc/metadata"
+	"golang.org/x/net/context"
 )
 
 // RPCStats contains stats information about RPCs.
@@ -79,10 +80,6 @@ type InHeader struct {
 	Client bool
 	// WireLength is the wire length of header.
 	WireLength int
-	// Compression is the compression algorithm used for the RPC.
-	Compression string
-	// Header contains the header metadata received.
-	Header metadata.MD
 
 	// The following fields are valid only if Client is false.
 	// FullMethod is the full RPC method string, i.e., /package.service/method.
@@ -91,6 +88,8 @@ type InHeader struct {
 	RemoteAddr net.Addr
 	// LocalAddr is the local address of the corresponding connection.
 	LocalAddr net.Addr
+	// Compression is the compression algorithm used for the RPC.
+	Compression string
 }
 
 // IsClient indicates if the stats information is from client side.
@@ -104,9 +103,6 @@ type InTrailer struct {
 	Client bool
 	// WireLength is the wire length of trailer.
 	WireLength int
-	// Trailer contains the trailer metadata received from the server. This
-	// field is only valid if this InTrailer is from the client side.
-	Trailer metadata.MD
 }
 
 // IsClient indicates if the stats information is from client side.
@@ -139,10 +135,8 @@ func (s *OutPayload) isRPCStats() {}
 type OutHeader struct {
 	// Client is true if this OutHeader is from client side.
 	Client bool
-	// Compression is the compression algorithm used for the RPC.
-	Compression string
-	// Header contains the header metadata sent.
-	Header metadata.MD
+	// WireLength is the wire length of header.
+	WireLength int
 
 	// The following fields are valid only if Client is true.
 	// FullMethod is the full RPC method string, i.e., /package.service/method.
@@ -151,6 +145,8 @@ type OutHeader struct {
 	RemoteAddr net.Addr
 	// LocalAddr is the local address of the corresponding connection.
 	LocalAddr net.Addr
+	// Compression is the compression algorithm used for the RPC.
+	Compression string
 }
 
 // IsClient indicates if this stats information is from client side.
@@ -163,13 +159,7 @@ type OutTrailer struct {
 	// Client is true if this OutTrailer is from client side.
 	Client bool
 	// WireLength is the wire length of trailer.
-	//
-	// Deprecated: This field is never set. The length is not known when this message is
-	// emitted because the trailer fields are compressed with hpack after that.
 	WireLength int
-	// Trailer contains the trailer metadata sent to the client. This
-	// field is only valid if this OutTrailer is from the server side.
-	Trailer metadata.MD
 }
 
 // IsClient indicates if this stats information is from client side.
@@ -181,14 +171,8 @@ func (s *OutTrailer) isRPCStats() {}
 type End struct {
 	// Client is true if this End is from client side.
 	Client bool
-	// BeginTime is the time when the RPC began.
-	BeginTime time.Time
 	// EndTime is the time when the RPC ends.
 	EndTime time.Time
-	// Trailer contains the trailer metadata received from the server. This
-	// field is only valid if this End is from the client side.
-	// Deprecated: use Trailer in InTrailer instead.
-	Trailer metadata.MD
 	// Error is the error the RPC ended with. It is an error generated from
 	// status.Status and can be converted back to status.Status using
 	// status.FromError if non-nil.
@@ -236,7 +220,7 @@ type outgoingTagsKey struct{}
 // the outgoing RPC with the header grpc-tags-bin.  Subsequent calls to
 // SetTags will overwrite the values from earlier calls.
 //
-// NOTE: this is provided only for backward compatibility with existing clients
+// NOTE: this is provided only for backward compatibilty with existing clients
 // and will likely be removed in an upcoming release.  New uses should transmit
 // this type of data using metadata with a different, non-reserved (i.e. does
 // not begin with "grpc-") header name.
@@ -246,7 +230,7 @@ func SetTags(ctx context.Context, b []byte) context.Context {
 
 // Tags returns the tags from the context for the inbound RPC.
 //
-// NOTE: this is provided only for backward compatibility with existing clients
+// NOTE: this is provided only for backward compatibilty with existing clients
 // and will likely be removed in an upcoming release.  New uses should transmit
 // this type of data using metadata with a different, non-reserved (i.e. does
 // not begin with "grpc-") header name.
@@ -278,7 +262,7 @@ type outgoingTraceKey struct{}
 // the outgoing RPC with the header grpc-trace-bin.  Subsequent calls to
 // SetTrace will overwrite the values from earlier calls.
 //
-// NOTE: this is provided only for backward compatibility with existing clients
+// NOTE: this is provided only for backward compatibilty with existing clients
 // and will likely be removed in an upcoming release.  New uses should transmit
 // this type of data using metadata with a different, non-reserved (i.e. does
 // not begin with "grpc-") header name.
@@ -288,7 +272,7 @@ func SetTrace(ctx context.Context, b []byte) context.Context {
 
 // Trace returns the trace from the context for the inbound RPC.
 //
-// NOTE: this is provided only for backward compatibility with existing clients
+// NOTE: this is provided only for backward compatibilty with existing clients
 // and will likely be removed in an upcoming release.  New uses should transmit
 // this type of data using metadata with a different, non-reserved (i.e. does
 // not begin with "grpc-") header name.

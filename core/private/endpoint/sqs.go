@@ -1,6 +1,7 @@
 package endpoint
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -10,8 +11,11 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
+	"github.com/streadway/amqp"
 	"github.com/tidwall/propgeo/internal/log"
 )
+
+var errCreateQueue = errors.New("Error while creating queue")
 
 const sqsExpiresAfter = time.Second * 30
 
@@ -21,6 +25,7 @@ type SQSConn struct {
 	ep      Endpoint
 	session *session.Session
 	svc     *sqs.SQS
+	channel *amqp.Channel
 	ex      bool
 	t       time.Time
 }
@@ -38,7 +43,7 @@ func (conn *SQSConn) Expired() bool {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if !conn.ex {
-		if time.Since(conn.t) > sqsExpiresAfter {
+		if time.Now().Sub(conn.t) > sqsExpiresAfter {
 			conn.ex = true
 			conn.close()
 		}

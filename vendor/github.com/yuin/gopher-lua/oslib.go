@@ -15,24 +15,9 @@ func init() {
 
 func getIntField(L *LState, tb *LTable, key string, v int) int {
 	ret := tb.RawGetString(key)
-
-	switch lv := ret.(type) {
-	case LNumber:
-		return int(lv)
-	case LString:
-		slv := string(lv)
-		slv = strings.TrimLeft(slv, " ")
-		if strings.HasPrefix(slv, "0") && !strings.HasPrefix(slv, "0x") && !strings.HasPrefix(slv, "0X") {
-			//Standard lua interpreter only support decimal and hexadecimal
-			slv = strings.TrimLeft(slv, "0")
-		}
-		if num, err := parseNumber(slv); err == nil {
-			return int(num)
-		}
-	default:
-		return v
+	if ln, ok := ret.(LNumber); ok {
+		return int(ln)
 	}
-
 	return v
 }
 
@@ -121,7 +106,7 @@ func osDate(L *LState) int {
 			ret.RawSetString("hour", LNumber(t.Hour()))
 			ret.RawSetString("min", LNumber(t.Minute()))
 			ret.RawSetString("sec", LNumber(t.Second()))
-			ret.RawSetString("wday", LNumber(t.Weekday()+1))
+			ret.RawSetString("wday", LNumber(t.Weekday()))
 			// TODO yday & dst
 			ret.RawSetString("yday", LNumber(0))
 			ret.RawSetString("isdst", LFalse)

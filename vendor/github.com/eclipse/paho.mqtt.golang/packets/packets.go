@@ -8,9 +8,9 @@ import (
 	"io"
 )
 
-// ControlPacket defines the interface for structs intended to hold
-// decoded MQTT packets, either from being read or before being
-// written
+//ControlPacket defines the interface for structs intended to hold
+//decoded MQTT packets, either from being read or before being
+//written
 type ControlPacket interface {
 	Write(io.Writer) error
 	Unpack(io.Reader) error
@@ -18,8 +18,8 @@ type ControlPacket interface {
 	Details() Details
 }
 
-// PacketNames maps the constants for each of the MQTT packet types
-// to a string representation of their name.
+//PacketNames maps the constants for each of the MQTT packet types
+//to a string representation of their name.
 var PacketNames = map[uint8]string{
 	1:  "CONNECT",
 	2:  "CONNACK",
@@ -37,7 +37,7 @@ var PacketNames = map[uint8]string{
 	14: "DISCONNECT",
 }
 
-// Below are the constants assigned to each of the MQTT packet types
+//Below are the constants assigned to each of the MQTT packet types
 const (
 	Connect     = 1
 	Connack     = 2
@@ -55,8 +55,8 @@ const (
 	Disconnect  = 14
 )
 
-// Below are the const definitions for error codes returned by
-// Connect()
+//Below are the const definitions for error codes returned by
+//Connect()
 const (
 	Accepted                        = 0x00
 	ErrRefusedBadProtocolVersion    = 0x01
@@ -68,8 +68,8 @@ const (
 	ErrProtocolViolation            = 0xFF
 )
 
-// ConnackReturnCodes is a map of the error codes constants for Connect()
-// to a string representation of the error
+//ConnackReturnCodes is a map of the error codes constants for Connect()
+//to a string representation of the error
 var ConnackReturnCodes = map[uint8]string{
 	0:   "Connection Accepted",
 	1:   "Connection Refused: Bad Protocol Version",
@@ -81,140 +81,134 @@ var ConnackReturnCodes = map[uint8]string{
 	255: "Connection Refused: Protocol Violation",
 }
 
-// ConnErrors is a map of the errors codes constants for Connect()
-// to a Go error
+//ConnErrors is a map of the errors codes constants for Connect()
+//to a Go error
 var ConnErrors = map[byte]error{
 	Accepted:                        nil,
-	ErrRefusedBadProtocolVersion:    errors.New("unacceptable protocol version"),
-	ErrRefusedIDRejected:            errors.New("identifier rejected"),
-	ErrRefusedServerUnavailable:     errors.New("server Unavailable"),
-	ErrRefusedBadUsernameOrPassword: errors.New("bad user name or password"),
-	ErrRefusedNotAuthorised:         errors.New("not Authorized"),
-	ErrNetworkError:                 errors.New("network Error"),
-	ErrProtocolViolation:            errors.New("protocol Violation"),
+	ErrRefusedBadProtocolVersion:    errors.New("Unnacceptable protocol version"),
+	ErrRefusedIDRejected:            errors.New("Identifier rejected"),
+	ErrRefusedServerUnavailable:     errors.New("Server Unavailable"),
+	ErrRefusedBadUsernameOrPassword: errors.New("Bad user name or password"),
+	ErrRefusedNotAuthorised:         errors.New("Not Authorized"),
+	ErrNetworkError:                 errors.New("Network Error"),
+	ErrProtocolViolation:            errors.New("Protocol Violation"),
 }
 
-// ReadPacket takes an instance of an io.Reader (such as net.Conn) and attempts
-// to read an MQTT packet from the stream. It returns a ControlPacket
-// representing the decoded MQTT packet and an error. One of these returns will
-// always be nil, a nil ControlPacket indicating an error occurred.
-func ReadPacket(r io.Reader) (ControlPacket, error) {
+//ReadPacket takes an instance of an io.Reader (such as net.Conn) and attempts
+//to read an MQTT packet from the stream. It returns a ControlPacket
+//representing the decoded MQTT packet and an error. One of these returns will
+//always be nil, a nil ControlPacket indicating an error occurred.
+func ReadPacket(r io.Reader) (cp ControlPacket, err error) {
 	var fh FixedHeader
 	b := make([]byte, 1)
 
-	_, err := io.ReadFull(r, b)
+	_, err = io.ReadFull(r, b)
 	if err != nil {
 		return nil, err
 	}
-
-	err = fh.unpack(b[0], r)
-	if err != nil {
-		return nil, err
+	fh.unpack(b[0], r)
+	cp = NewControlPacketWithHeader(fh)
+	if cp == nil {
+		return nil, errors.New("Bad data from client")
 	}
-
-	cp, err := NewControlPacketWithHeader(fh)
-	if err != nil {
-		return nil, err
-	}
-
 	packetBytes := make([]byte, fh.RemainingLength)
-	n, err := io.ReadFull(r, packetBytes)
+	_, err = io.ReadFull(r, packetBytes)
 	if err != nil {
 		return nil, err
 	}
-	if n != fh.RemainingLength {
-		return nil, errors.New("failed to read expected data")
-	}
-
 	err = cp.Unpack(bytes.NewBuffer(packetBytes))
 	return cp, err
 }
 
-// NewControlPacket is used to create a new ControlPacket of the type specified
-// by packetType, this is usually done by reference to the packet type constants
-// defined in packets.go. The newly created ControlPacket is empty and a pointer
-// is returned.
-func NewControlPacket(packetType byte) ControlPacket {
+//NewControlPacket is used to create a new ControlPacket of the type specified
+//by packetType, this is usually done by reference to the packet type constants
+//defined in packets.go. The newly created ControlPacket is empty and a pointer
+//is returned.
+func NewControlPacket(packetType byte) (cp ControlPacket) {
 	switch packetType {
 	case Connect:
-		return &ConnectPacket{FixedHeader: FixedHeader{MessageType: Connect}}
+		cp = &ConnectPacket{FixedHeader: FixedHeader{MessageType: Connect}}
 	case Connack:
-		return &ConnackPacket{FixedHeader: FixedHeader{MessageType: Connack}}
+		cp = &ConnackPacket{FixedHeader: FixedHeader{MessageType: Connack}}
 	case Disconnect:
-		return &DisconnectPacket{FixedHeader: FixedHeader{MessageType: Disconnect}}
+		cp = &DisconnectPacket{FixedHeader: FixedHeader{MessageType: Disconnect}}
 	case Publish:
-		return &PublishPacket{FixedHeader: FixedHeader{MessageType: Publish}}
+		cp = &PublishPacket{FixedHeader: FixedHeader{MessageType: Publish}}
 	case Puback:
-		return &PubackPacket{FixedHeader: FixedHeader{MessageType: Puback}}
+		cp = &PubackPacket{FixedHeader: FixedHeader{MessageType: Puback}}
 	case Pubrec:
-		return &PubrecPacket{FixedHeader: FixedHeader{MessageType: Pubrec}}
+		cp = &PubrecPacket{FixedHeader: FixedHeader{MessageType: Pubrec}}
 	case Pubrel:
-		return &PubrelPacket{FixedHeader: FixedHeader{MessageType: Pubrel, Qos: 1}}
+		cp = &PubrelPacket{FixedHeader: FixedHeader{MessageType: Pubrel, Qos: 1}}
 	case Pubcomp:
-		return &PubcompPacket{FixedHeader: FixedHeader{MessageType: Pubcomp}}
+		cp = &PubcompPacket{FixedHeader: FixedHeader{MessageType: Pubcomp}}
 	case Subscribe:
-		return &SubscribePacket{FixedHeader: FixedHeader{MessageType: Subscribe, Qos: 1}}
+		cp = &SubscribePacket{FixedHeader: FixedHeader{MessageType: Subscribe, Qos: 1}}
 	case Suback:
-		return &SubackPacket{FixedHeader: FixedHeader{MessageType: Suback}}
+		cp = &SubackPacket{FixedHeader: FixedHeader{MessageType: Suback}}
 	case Unsubscribe:
-		return &UnsubscribePacket{FixedHeader: FixedHeader{MessageType: Unsubscribe, Qos: 1}}
+		cp = &UnsubscribePacket{FixedHeader: FixedHeader{MessageType: Unsubscribe, Qos: 1}}
 	case Unsuback:
-		return &UnsubackPacket{FixedHeader: FixedHeader{MessageType: Unsuback}}
+		cp = &UnsubackPacket{FixedHeader: FixedHeader{MessageType: Unsuback}}
 	case Pingreq:
-		return &PingreqPacket{FixedHeader: FixedHeader{MessageType: Pingreq}}
+		cp = &PingreqPacket{FixedHeader: FixedHeader{MessageType: Pingreq}}
 	case Pingresp:
-		return &PingrespPacket{FixedHeader: FixedHeader{MessageType: Pingresp}}
+		cp = &PingrespPacket{FixedHeader: FixedHeader{MessageType: Pingresp}}
+	default:
+		return nil
 	}
-	return nil
+	return cp
 }
 
-// NewControlPacketWithHeader is used to create a new ControlPacket of the type
-// specified within the FixedHeader that is passed to the function.
-// The newly created ControlPacket is empty and a pointer is returned.
-func NewControlPacketWithHeader(fh FixedHeader) (ControlPacket, error) {
+//NewControlPacketWithHeader is used to create a new ControlPacket of the type
+//specified within the FixedHeader that is passed to the function.
+//The newly created ControlPacket is empty and a pointer is returned.
+func NewControlPacketWithHeader(fh FixedHeader) (cp ControlPacket) {
 	switch fh.MessageType {
 	case Connect:
-		return &ConnectPacket{FixedHeader: fh}, nil
+		cp = &ConnectPacket{FixedHeader: fh}
 	case Connack:
-		return &ConnackPacket{FixedHeader: fh}, nil
+		cp = &ConnackPacket{FixedHeader: fh}
 	case Disconnect:
-		return &DisconnectPacket{FixedHeader: fh}, nil
+		cp = &DisconnectPacket{FixedHeader: fh}
 	case Publish:
-		return &PublishPacket{FixedHeader: fh}, nil
+		cp = &PublishPacket{FixedHeader: fh}
 	case Puback:
-		return &PubackPacket{FixedHeader: fh}, nil
+		cp = &PubackPacket{FixedHeader: fh}
 	case Pubrec:
-		return &PubrecPacket{FixedHeader: fh}, nil
+		cp = &PubrecPacket{FixedHeader: fh}
 	case Pubrel:
-		return &PubrelPacket{FixedHeader: fh}, nil
+		cp = &PubrelPacket{FixedHeader: fh}
 	case Pubcomp:
-		return &PubcompPacket{FixedHeader: fh}, nil
+		cp = &PubcompPacket{FixedHeader: fh}
 	case Subscribe:
-		return &SubscribePacket{FixedHeader: fh}, nil
+		cp = &SubscribePacket{FixedHeader: fh}
 	case Suback:
-		return &SubackPacket{FixedHeader: fh}, nil
+		cp = &SubackPacket{FixedHeader: fh}
 	case Unsubscribe:
-		return &UnsubscribePacket{FixedHeader: fh}, nil
+		cp = &UnsubscribePacket{FixedHeader: fh}
 	case Unsuback:
-		return &UnsubackPacket{FixedHeader: fh}, nil
+		cp = &UnsubackPacket{FixedHeader: fh}
 	case Pingreq:
-		return &PingreqPacket{FixedHeader: fh}, nil
+		cp = &PingreqPacket{FixedHeader: fh}
 	case Pingresp:
-		return &PingrespPacket{FixedHeader: fh}, nil
+		cp = &PingrespPacket{FixedHeader: fh}
+	default:
+		return nil
 	}
-	return nil, fmt.Errorf("unsupported packet type 0x%x", fh.MessageType)
+	return cp
 }
 
-// Details struct returned by the Details() function called on
-// ControlPackets to present details of the Qos and MessageID
-// of the ControlPacket
+//Details struct returned by the Details() function called on
+//ControlPackets to present details of the Qos and MessageID
+//of the ControlPacket
 type Details struct {
 	Qos       byte
 	MessageID uint16
 }
 
-// FixedHeader is a struct to hold the decoded information from
-// the fixed header of an MQTT ControlPacket
+//FixedHeader is a struct to hold the decoded information from
+//the fixed header of an MQTT ControlPacket
 type FixedHeader struct {
 	MessageType     byte
 	Dup             bool
@@ -243,64 +237,50 @@ func (fh *FixedHeader) pack() bytes.Buffer {
 	return header
 }
 
-func (fh *FixedHeader) unpack(typeAndFlags byte, r io.Reader) error {
+func (fh *FixedHeader) unpack(typeAndFlags byte, r io.Reader) {
 	fh.MessageType = typeAndFlags >> 4
 	fh.Dup = (typeAndFlags>>3)&0x01 > 0
 	fh.Qos = (typeAndFlags >> 1) & 0x03
 	fh.Retain = typeAndFlags&0x01 > 0
-
-	var err error
-	fh.RemainingLength, err = decodeLength(r)
-	return err
+	fh.RemainingLength = decodeLength(r)
 }
 
-func decodeByte(b io.Reader) (byte, error) {
+func decodeByte(b io.Reader) byte {
 	num := make([]byte, 1)
-	_, err := b.Read(num)
-	if err != nil {
-		return 0, err
-	}
-
-	return num[0], nil
+	b.Read(num)
+	return num[0]
 }
 
-func decodeUint16(b io.Reader) (uint16, error) {
+func decodeUint16(b io.Reader) uint16 {
 	num := make([]byte, 2)
-	_, err := b.Read(num)
-	if err != nil {
-		return 0, err
-	}
-	return binary.BigEndian.Uint16(num), nil
+	b.Read(num)
+	return binary.BigEndian.Uint16(num)
 }
 
 func encodeUint16(num uint16) []byte {
-	bytesResult := make([]byte, 2)
-	binary.BigEndian.PutUint16(bytesResult, num)
-	return bytesResult
+	bytes := make([]byte, 2)
+	binary.BigEndian.PutUint16(bytes, num)
+	return bytes
 }
 
 func encodeString(field string) []byte {
-	return encodeBytes([]byte(field))
+	fieldLength := make([]byte, 2)
+	binary.BigEndian.PutUint16(fieldLength, uint16(len(field)))
+	return append(fieldLength, []byte(field)...)
 }
 
-func decodeString(b io.Reader) (string, error) {
-	buf, err := decodeBytes(b)
-	return string(buf), err
-}
-
-func decodeBytes(b io.Reader) ([]byte, error) {
-	fieldLength, err := decodeUint16(b)
-	if err != nil {
-		return nil, err
-	}
-
+func decodeString(b io.Reader) string {
+	fieldLength := decodeUint16(b)
 	field := make([]byte, fieldLength)
-	_, err = b.Read(field)
-	if err != nil {
-		return nil, err
-	}
+	b.Read(field)
+	return string(field)
+}
 
-	return field, nil
+func decodeBytes(b io.Reader) []byte {
+	fieldLength := decodeUint16(b)
+	field := make([]byte, fieldLength)
+	b.Read(field)
+	return field
 }
 
 func encodeBytes(field []byte) []byte {
@@ -325,16 +305,12 @@ func encodeLength(length int) []byte {
 	return encLength
 }
 
-func decodeLength(r io.Reader) (int, error) {
+func decodeLength(r io.Reader) int {
 	var rLength uint32
 	var multiplier uint32
 	b := make([]byte, 1)
-	for multiplier < 27 { // fix: Infinite '(digit & 128) == 1' will cause the dead loop
-		_, err := io.ReadFull(r, b)
-		if err != nil {
-			return 0, err
-		}
-
+	for multiplier < 27 { //fix: Infinite '(digit & 128) == 1' will cause the dead loop
+		io.ReadFull(r, b)
 		digit := b[0]
 		rLength |= uint32(digit&127) << multiplier
 		if (digit & 128) == 0 {
@@ -342,5 +318,5 @@ func decodeLength(r io.Reader) (int, error) {
 		}
 		multiplier += 7
 	}
-	return int(rLength), nil
+	return int(rLength)
 }

@@ -48,8 +48,6 @@ func (ls *LState) CheckString(n int) string {
 	v := ls.Get(n)
 	if lv, ok := v.(LString); ok {
 		return string(lv)
-	} else if LVCanConvToString(v) {
-		return ls.ToString(n)
 	}
 	ls.TypeError(n, LTString)
 	return ""

@@ -3,10 +3,13 @@
     src="logo.png" 
     width="336" height="75" border="0" alt="REDCON">
 <br>
+<a href="https://travis-ci.org/tidwall/redcon"><img src="https://img.shields.io/travis/tidwall/redcon.svg?style=flat-square" alt="Build Status"></a>
 <a href="https://godoc.org/github.com/tidwall/redcon"><img src="https://img.shields.io/badge/api-reference-blue.svg?style=flat-square" alt="GoDoc"></a>
 </p>
 
-<p align="center">Redis compatible server framework for Go</p>
+<p align="center">Fast Redis compatible server framework for Go</p>
+
+Redcon is a custom Redis server framework for Go that is fast and simple to use. The reason for this library it to give an efficient server front-end for the [BuntDB](https://github.com/tidwall/buntdb) and [PropGeo](https://github.com/tidwall/propgeo) projects.
 
 Features
 --------
@@ -15,8 +18,6 @@ Features
 - Support for pipelining and telnet commands
 - Works with Redis clients such as [redigo](https://github.com/garyburd/redigo), [redis-py](https://github.com/andymccurdy/redis-py), [node_redis](https://github.com/NodeRedis/node_redis), and [jedis](https://github.com/xetorthio/jedis)
 - [TLS Support](#tls-example)
-- Compatible pub/sub support
-- Multithreaded
 
 Installing
 ----------
@@ -35,8 +36,6 @@ Here's a full example of a Redis clone that accepts:
 - DEL key
 - PING
 - QUIT
-- PUBLISH channel message
-- SUBSCRIBE channel
 
 You can run this example from a terminal:
 
@@ -60,7 +59,6 @@ var addr = ":6380"
 func main() {
 	var mu sync.RWMutex
 	var items = make(map[string][]byte)
-	var ps redcon.PubSub
 	go log.Printf("started server at %s", addr)
 	err := redcon.ListenAndServe(addr,
 		func(conn redcon.Conn, cmd redcon.Command) {
@@ -108,34 +106,15 @@ func main() {
 				} else {
 					conn.WriteInt(1)
 				}
-			case "publish":
-				if len(cmd.Args) != 3 {
-					conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
-					return
-				}
-				conn.WriteInt(ps.Publish(string(cmd.Args[1]), string(cmd.Args[2])))
-			case "subscribe", "psubscribe":
-				if len(cmd.Args) < 2 {
-					conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
-					return
-				}
-				command := strings.ToLower(string(cmd.Args[0]))
-				for i := 1; i < len(cmd.Args); i++ {
-					if command == "psubscribe" {
-						ps.Psubscribe(conn, string(cmd.Args[i]))
-					} else {
-						ps.Subscribe(conn, string(cmd.Args[i]))
-					}
-				}
 			}
 		},
 		func(conn redcon.Conn) bool {
-			// Use this function to accept or deny the connection.
+			// use this function to accept or deny the connection.
 			// log.Printf("accept: %s", conn.RemoteAddr())
 			return true
 		},
 		func(conn redcon.Conn, err error) {
-			// This is called when the connection has been closed
+			// this is called when the connection has been closed
 			// log.Printf("closed: %s, err: %v", conn.RemoteAddr(), err)
 		},
 	)
