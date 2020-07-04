@@ -373,8 +373,8 @@ func getBalanceScore(assignment map[string][]topicPartitionAssignment) int {
 }
 
 // Determine whether the current assignment plan is balanced.
-func isBalanced(currentAssignment map[string][]topicPartitionAssignment, allSubscriptions map[string][]topicPartitionAssignment) bool {
-	sortedCurrentSubscriptions := sortMemberIDsByPartitionAssignments(currentAssignment)
+func isBalanced(currentAssignment map[string][]topicPartitionAssignment, sortedCurrentSubscriptions []string, allSubscriptions map[string][]topicPartitionAssignment) bool {
+	sortedCurrentSubscriptions = sortMemberIDsByPartitionAssignments(currentAssignment)
 	min := len(currentAssignment[sortedCurrentSubscriptions[0]])
 	max := len(currentAssignment[sortedCurrentSubscriptions[len(sortedCurrentSubscriptions)-1]])
 	if min >= max-1 {
@@ -430,7 +430,7 @@ func (s *stickyBalanceStrategy) performReassignments(reassignablePartitions []to
 		// reassign all reassignable partitions (starting from the partition with least potential consumers and if needed)
 		// until the full list is processed or a balance is achieved
 		for _, partition := range reassignablePartitions {
-			if isBalanced(currentAssignment, consumer2AllPotentialPartitions) {
+			if isBalanced(currentAssignment, sortedCurrentSubscriptions, consumer2AllPotentialPartitions) {
 				break
 			}
 
@@ -690,11 +690,11 @@ func sortPartitionsByPotentialConsumerAssignments(partition2AllPotentialConsumer
 }
 
 func deepCopyAssignment(assignment map[string][]topicPartitionAssignment) map[string][]topicPartitionAssignment {
-	m := make(map[string][]topicPartitionAssignment, len(assignment))
+	copy := make(map[string][]topicPartitionAssignment, len(assignment))
 	for memberID, subscriptions := range assignment {
-		m[memberID] = append(subscriptions[:0:0], subscriptions...)
+		copy[memberID] = append(subscriptions[:0:0], subscriptions...)
 	}
-	return m
+	return copy
 }
 
 func areSubscriptionsIdentical(partition2AllPotentialConsumers map[topicPartitionAssignment][]string, consumer2AllPotentialPartitions map[string][]topicPartitionAssignment) bool {
