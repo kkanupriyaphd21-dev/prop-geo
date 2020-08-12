@@ -400,12 +400,13 @@ func (sw *scanWriter) writeObject(opts ScanWriterParams) bool {
 
 			} else if len(sw.farr) > 0 {
 				jsfields = `,"fields":[`
-				for i := range sw.farr {
+				for i, name := range sw.farr {
 					if i > 0 {
 						jsfields += `,`
 					}
-					if len(opts.fields) > i {
-						jsfields += strconv.FormatFloat(opts.fields[i], 'f', -1, 64)
+					j := sw.fmap[name]
+					if j < len(opts.fields) {
+						jsfields += strconv.FormatFloat(opts.fields[j], 'f', -1, 64)
 					} else {
 						jsfields += "0"
 					}
