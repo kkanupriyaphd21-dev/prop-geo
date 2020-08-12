@@ -39,22 +39,24 @@ func (s *Server) liveMonitor(conn net.Conn, rd *PipelineReader, msg *Message) er
 	s.monconnsMu.Lock()
 	conn.Write([]byte("+OK\r\n"))
 	s.monconnsMu.Unlock()
-	msgs, err := rd.ReadMessages()
-	if err != nil {
-		if err == io.EOF {
-			return nil
+	for {
+		msgs, err := rd.ReadMessages()
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
 		}
-		return err
-	}
-	for _, msg := range msgs {
-		if len(msg.Args) == 1 && strings.ToLower(msg.Args[0]) == "quit" {
-			s.monconnsMu.Lock()
-			conn.Write([]byte("+OK\r\n"))
-			s.monconnsMu.Unlock()
-			return nil
+		for _, msg := range msgs {
+			if len(msg.Args) == 1 && strings.ToLower(msg.Args[0]) == "quit" {
+				s.monconnsMu.Lock()
+				conn.Write([]byte("+OK\r\n"))
+				s.monconnsMu.Unlock()
+				return nil
+			}
 		}
+		return nil
 	}
-	return nil
 }
 
 // send messages to live MONITOR clients
