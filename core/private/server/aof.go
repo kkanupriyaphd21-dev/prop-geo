@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/tidwall/buntdb"
-	"github.com/tidwall/geojson/geometry"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/redcon"
 	"github.com/tidwall/resp"
@@ -32,7 +31,7 @@ func (err errAOFHook) Error() string {
 
 var errInvalidAOF = errors.New("invalid aof file")
 
-func (s *Server) loadAOF() error {
+func (s *Server) loadAOF() (err error) {
 	fi, err := s.aof.Stat()
 	if err != nil {
 		return err
@@ -58,12 +57,25 @@ func (s *Server) loadAOF() error {
 	var buf []byte
 	var args [][]byte
 	var packet [0xFFFF]byte
+	var zeros int
 	for {
 		n, err := s.aof.Read(packet[:])
 		if err != nil {
 			if err == io.EOF {
 				if len(buf) > 0 {
 					return io.ErrUnexpectedEOF
+				}
+				if zeros > 0 {
+					// Trailing zeros in AOF. Truncate the file so it's sane.
+					// See issue #230 for more information. Force a warning.
+					log.Infof("Truncating %d zeros from AOF (issue #230)", zeros)
+					s.aofsz -= zeros
+					if err := s.aof.Truncate(int64(s.aofsz)); err != nil {
+						return err
+					}
+					if _, err := s.aof.Seek(int64(s.aofsz), 0); err != nil {
+						return err
+					}
 				}
 				return nil
 			}
@@ -76,6 +88,16 @@ func (s *Server) loadAOF() error {
 		}
 		var complete bool
 		for {
+			if len(data) > 0 {
+				if data[0] == 0 {
+					zeros++
+					data = data[1:]
+					continue
+				}
+				if zeros > 0 {
+					return errors.New("Zeros found in AOF file (issue #230)")
+				}
+			}
 			complete, args, _, data, err = redcon.ReadNextCommand(data, args[:0])
 			if err != nil {
 				return err
@@ -204,55 +226,70 @@ func (s *Server) writeAOF(args []string, d *commandDetails) error {
 }
 
 func (s *Server) getQueueCandidates(d *commandDetails) []*Hook {
-	var candidates []*Hook
+	candidates := make(map[*Hook]bool)
 	// add the hooks with "outside" detection
-	if len(s.hooksOut) > 0 {
-		for _, hook := range s.hooksOut {
-			if hook.Key == d.key {
-				candidates = append(candidates, hook)
-			}
+	for _, hook := range s.hooksOut {
+		if hook.Key == d.key {
+			candidates[hook] = true
 		}
 	}
-	// search the hook spatial tree
-	// build a rectangle that fills the old and new which will be enough to
-	// handle "enter", "inside", "exit", and "cross" detections.
-	var rect geometry.Rect
-	if d.oldObj != nil {
-		rect = d.oldObj.Rect()
-		if d.obj != nil {
-			r2 := d.obj.Rect()
-			rect.Min.X = math.Min(rect.Min.X, r2.Min.X)
-			rect.Min.Y = math.Min(rect.Min.Y, r2.Min.Y)
-			rect.Max.X = math.Max(rect.Max.X, r2.Max.X)
-			rect.Max.Y = math.Max(rect.Max.Y, r2.Max.Y)
-		}
-	} else if d.obj != nil {
-		rect = d.obj.Rect()
-	} else {
-		return candidates
-	}
-	s.hookTree.Search(
-		[2]float64{rect.Min.X, rect.Min.Y},
-		[2]float64{rect.Max.X, rect.Max.Y},
-		func(_, _ [2]float64, value interface{}) bool {
-			hook := value.(*Hook)
-			if hook.Key != d.key {
-				return true
-			}
-			var found bool
-			for _, candidate := range candidates {
-				if candidate == hook {
-					found = true
-					break
+	// look for candidates that might "cross" geofences
+	if d.oldObj != nil && d.obj != nil && s.hookCross.Len() > 0 {
+		r1, r2 := d.oldObj.Rect(), d.obj.Rect()
+		s.hookCross.Search(
+			[2]float64{
+				math.Min(r1.Min.X, r2.Min.X),
+				math.Min(r1.Min.Y, r2.Min.Y),
+			},
+			[2]float64{
+				math.Max(r1.Max.X, r2.Max.X),
+				math.Max(r1.Max.Y, r2.Max.Y),
+			},
+			func(min, max [2]float64, value interface{}) bool {
+				hook := value.(*Hook)
+				if hook.Key == d.key {
+					candidates[hook] = true
 				}
-			}
-			if !found {
-				candidates = append(candidates, hook)
-			}
-			return true
-		},
-	)
-	return candidates
+				return true
+			})
+	}
+	// look for candidates that overlap the old object
+	if d.oldObj != nil {
+		r1 := d.oldObj.Rect()
+		s.hookTree.Search(
+			[2]float64{r1.Min.X, r1.Min.Y},
+			[2]float64{r1.Max.X, r1.Max.Y},
+			func(min, max [2]float64, value interface{}) bool {
+				hook := value.(*Hook)
+				if hook.Key == d.key {
+					candidates[hook] = true
+				}
+				return true
+			})
+	}
+	// look for candidates that overlap the new object
+	if d.obj != nil {
+		r1 := d.obj.Rect()
+		s.hookTree.Search(
+			[2]float64{r1.Min.X, r1.Min.Y},
+			[2]float64{r1.Max.X, r1.Max.Y},
+			func(min, max [2]float64, value interface{}) bool {
+				hook := value.(*Hook)
+				if hook.Key == d.key {
+					candidates[hook] = true
+				}
+				return true
+			})
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	// return the candidates as a slice
+	ret := make([]*Hook, 0, len(candidates))
+	for hook := range candidates {
+		ret = append(ret, hook)
+	}
+	return ret
 }
 
 func (s *Server) queueHooks(d *commandDetails) error {
