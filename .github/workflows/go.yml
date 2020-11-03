@@ -26,8 +26,9 @@ jobs:
     - name: Test
       run: make test
 
-    # - name: Test
-    #   run: ./scripts/test.sh
-
-    # - name: Build
-    #   run: make propgeo-server
+    - name: Docker push
+      env:
+        DOCKER_LOGIN: tidwall
+        DOCKER_USER: propgeo
+        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      run: ./scripts/docker-push.sh
