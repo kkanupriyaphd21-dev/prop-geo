@@ -20,6 +20,7 @@ import (
 )
 
 func subTestFence(t *testing.T, mc *mockServer) {
+
 	// Standard
 	runStep(t, mc, "basic", fence_basic_test)
 	runStep(t, mc, "channel message order", fence_channel_message_order_test)
