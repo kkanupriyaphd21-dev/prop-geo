@@ -4,7 +4,7 @@
     width="284" height="108" border="0" alt="PropGeo"></a>
 </p>
 <p align="center">
-<a href="https://propgeo.com/slack"><img src="https://img.shields.io/badge/slack-channel-orange.svg" alt="Slack Channel"></a>
+<a href="https://propgeo.com/slack/"><img src="https://img.shields.io/badge/slack-channel-orange.svg" alt="Slack Channel"></a>
 <a href="https://hub.docker.com/r/propgeo/propgeo"><img src="https://img.shields.io/badge/docker-ready-blue.svg" alt="Docker Ready"></a>
 </p>
 
