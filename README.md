@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://propgeo.com"><img 
-    src="/.github/images/logo.svg" 
+    src="/.github/images/logo-light-dark.svg" 
     width="284" height="108" border="0" alt="PropGeo"></a>
 </p>
 <p align="center">
