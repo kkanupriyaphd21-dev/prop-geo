@@ -330,6 +330,7 @@ PropGeo uses the [Redis RESP](https://redis.io/topics/protocol) protocol nativel
 - PHP: [tinyredisclient](https://github.com/ptrofimov/tinyredisclient) ([example code](https://github.com/tidwall/propgeo/wiki/PHP-example-(tinyredisclient)))
 - PHP: [phpredis](https://github.com/phpredis/phpredis)
 - Python: [redis-py](https://github.com/andymccurdy/redis-py) ([example code](https://github.com/tidwall/propgeo/wiki/Python-example))
+- Python: [pypropgeo](https://github.com/mitghi/pypropgeo)
 - Ruby: [redic](https://github.com/amakawa/redic) ([example code](https://github.com/tidwall/propgeo/wiki/Ruby-example-(redic)))
 - Ruby: [redis-rb](https://github.com/redis/redis-rb) ([example code](https://github.com/tidwall/propgeo/wiki/Ruby-example-(redis-rb)))
 - Rust: [redis-rs](https://github.com/mitsuhiko/redis-rs)
