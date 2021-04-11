@@ -309,7 +309,7 @@ The server will respond in [JSON](https://json.org) or [RESP](https://redis.io/t
 - HTTP and Websockets use JSON. 
 - Telnet and RESP clients use RESP.
 
-## PropGeo Clients Libraries
+## PropGeo Client Libraries
 
 The following clients are built specifically for PropGeo.  
 Clients that support most PropGeo features are marked with a ⭐️.
