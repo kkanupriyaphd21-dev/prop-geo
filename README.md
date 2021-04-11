@@ -311,7 +311,7 @@ The server will respond in [JSON](https://json.org) or [RESP](https://redis.io/t
 
 ## PropGeo Clients Libraries
 
-The following clients are built specifically for PropGeo. 
+The following clients are built specifically for PropGeo.  
 Clients that support most PropGeo features are marked with a ⭐️.
 
 - ⭐️ Go: [xjem/t38c](https://github.com/xjem/t38c)
