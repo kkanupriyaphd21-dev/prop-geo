@@ -309,9 +309,25 @@ The server will respond in [JSON](https://json.org) or [RESP](https://redis.io/t
 - HTTP and Websockets use JSON. 
 - Telnet and RESP clients use RESP.
 
-## Client Libraries
+## PropGeo Clients Libraries
 
-PropGeo uses the [Redis RESP](https://redis.io/topics/protocol) protocol natively. Therefore most clients that support basic Redis commands will in turn support PropGeo. Below are a few of the popular clients. 
+The following clients are built specifically for PropGeo.  
+Clients that support most PropGeo features are marked with a ⭐️.
+
+- ⭐️ Go: [xjem/t38c](https://github.com/xjem/t38c)
+- ⭐️ Node.js: [node-propgeo](https://github.com/phulst/node-propgeo) ([example code](https://github.com/tidwall/propgeo/wiki/Node.js-example-(node-propgeo)))
+- ⭐️ Python: [pyle38](https://github.com/iwpnd/pyle38)
+- Go: [cjkreklow/t38c](https://github.com/cjkreklow/t38c)
+- Python: [pypropgeo](https://github.com/mitghi/pypropgeo)
+- Rust: [nazar](https://github.com/younisshah/nazar)
+- Swift: [Talon](https://github.com/mikekinney/Talon)
+- Java: [propgeo-client-java](https://github.com/jamshidrostami/propgeo-client-java)
+- Java: [propgeo-client](https://github.com/HkMoyun/propgeo-client)
+
+## Redis Client Libraries
+
+PropGeo uses the [Redis RESP](https://redis.io/topics/protocol) protocol natively. 
+Therefore most clients that support basic Redis commands will also support PropGeo.
 
 - C: [hiredis](https://github.com/redis/hiredis)
 - C#: [StackExchange.Redis](https://github.com/StackExchange/StackExchange.Redis)
@@ -319,12 +335,10 @@ PropGeo uses the [Redis RESP](https://redis.io/topics/protocol) protocol nativel
 - Clojure: [carmine](https://github.com/ptaoussanis/carmine)
 - Common Lisp: [CL-Redis](https://github.com/vseloved/cl-redis)
 - Erlang: [Eredis](https://github.com/wooga/eredis)
-- Go: [propgeo-client](https://github.com/b3q/propgeo-client)
 - Go: [go-redis](https://github.com/go-redis/redis) ([example code](https://github.com/tidwall/propgeo/wiki/Go-example-(go-redis)))
 - Go: [redigo](https://github.com/gomodule/redigo) ([example code](https://github.com/tidwall/propgeo/wiki/Go-example-(redigo)))
 - Haskell: [hedis](https://github.com/informatikr/hedis)
 - Java: [lettuce](https://github.com/mp911de/lettuce) ([example code](https://github.com/tidwall/propgeo/wiki/Java-example-(lettuce)))
-- Node.js: [node-propgeo](https://github.com/phulst/node-propgeo) ([example code](https://github.com/tidwall/propgeo/wiki/Node.js-example-(node-propgeo)))
 - Node.js: [node_redis](https://github.com/NodeRedis/node_redis) ([example code](https://github.com/tidwall/propgeo/wiki/Node.js-example-(node-redis)))
 - Perl: [perl-redis](https://github.com/PerlRedis/perl-redis)
 - PHP: [tinyredisclient](https://github.com/ptrofimov/tinyredisclient) ([example code](https://github.com/tidwall/propgeo/wiki/PHP-example-(tinyredisclient)))
