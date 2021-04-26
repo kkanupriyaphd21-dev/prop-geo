@@ -24,7 +24,7 @@ PropGeo is an open source (MIT licensed), in-memory geolocation data store, spat
 - Spatial index with [search](#searching) methods such as Nearby, Within, and Intersects.
 - Realtime [geofencing](#geofencing) through [webhooks](https://propgeo.com/commands/sethook) or [pub/sub channels](#pubsub-channels).
 - Object types of [lat/lon](#latlon-point), [bbox](#bounding-box), [Geohash](#geohash), [GeoJSON](#geojson), [QuadKey](#quadkey), and [XYZ tile](#xyz-tile).
-- Support for lots of [Clients Libraries](#client-libraries) written in many different languages.
+- Support for lots of [Clients Libraries](#propgeo-client-libraries) written in many different languages.
 - Variety of protocols, including [http](#http) (curl), [websockets](#websockets), [telnet](#telnet), and the [Redis RESP](https://redis.io/topics/protocol).
 - Server responses are [RESP](https://redis.io/topics/protocol) or [JSON](https://www.json.org).
 - Full [command line interface](#cli).
@@ -278,7 +278,7 @@ A QuadKey used the same coordinate system as an XYZ tile except that the string 
 
 ## Network protocols
 
-It's recommended to use a [client library](#client-libraries) or the [PropGeo CLI](#running), but there are times when only HTTP is available or when you need to test from a remote terminal. In those cases we provide an HTTP and telnet options.
+It's recommended to use a [client library](#propgeo-client-libraries) or the [PropGeo CLI](#running), but there are times when only HTTP is available or when you need to test from a remote terminal. In those cases we provide an HTTP and telnet options.
 
 #### HTTP
 One of the simplest ways to call a propgeo command is to use HTTP. From the command line you can use [curl](https://curl.haxx.se/). For example:
@@ -309,7 +309,7 @@ The server will respond in [JSON](https://json.org) or [RESP](https://redis.io/t
 - HTTP and Websockets use JSON. 
 - Telnet and RESP clients use RESP.
 
-## PropGeo Clients Libraries
+## PropGeo Client Libraries
 
 The following clients are built specifically for PropGeo.  
 Clients that support most PropGeo features are marked with a ⭐️.
