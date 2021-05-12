@@ -100,7 +100,7 @@ func main() {
 
 func startPropGeoServer() {
 	log.Println("start propgeo server")
-	err := server.Serve("localhost", propgeoPort, "data", false)
+	err := server.Serve("localhost", propgeoPort, "data", false, "")
 	if err != nil {
 		log.Fatal(err)
 	}
