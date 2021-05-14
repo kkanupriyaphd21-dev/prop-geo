@@ -39,7 +39,7 @@ func subTestMetrics(t *testing.T, mc *mockServer) {
 		t.Fatalf("Expected status code 200, got: %d", status)
 	}
 	for _, want := range []string{
-		`propgeo_connected_clients 1`,
+		`propgeo_connected_clients`,
 		`propgeo_cmd_duration_seconds_count{cmd="set"}`,
 		`go_build_info`,
 		`go_threads`,
