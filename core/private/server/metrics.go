@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/tidwall/propgeo/core"
@@ -18,7 +19,7 @@ var (
 		"num_collections":          prometheus.NewDesc("propgeo_collections", "Total number of collections", nil, nil),
 		"pid":                      prometheus.NewDesc("propgeo_pid", "", nil, nil),
 		"aof_size":                 prometheus.NewDesc("propgeo_aof_size_bytes", "", nil, nil),
-		"num_hooks":                prometheus.NewDesc("propgeo_hooks_total", "", nil, nil),
+		"num_hooks":                prometheus.NewDesc("propgeo_hooks", "", nil, nil),
 		"in_memory_size":           prometheus.NewDesc("propgeo_in_memory_size_bytes", "", nil, nil),
 		"heap_size":                prometheus.NewDesc("propgeo_heap_size_bytes", "", nil, nil),
 		"heap_released":            prometheus.NewDesc("propgeo_memory_reap_released_bytes", "", nil, nil),
@@ -27,6 +28,10 @@ var (
 		"pointer_size":             prometheus.NewDesc("propgeo_pointer_size_bytes", "", nil, nil),
 		"cpus":                     prometheus.NewDesc("propgeo_num_cpus", "", nil, nil),
 		"propgeo_connected_clients": prometheus.NewDesc("propgeo_connected_clients", "", nil, nil),
+
+		"propgeo_total_connections_received": prometheus.NewDesc("propgeo_connections_received_total", "", nil, nil),
+		"propgeo_total_messages_sent":        prometheus.NewDesc("propgeo_messages_sent_total", "", nil, nil),
+		"propgeo_expired_keys":               prometheus.NewDesc("propgeo_expired_keys_total", "", nil, nil),
 
 		/*
 			these metrics are NOT taken from basicStats() / extStats()
@@ -37,6 +42,8 @@ var (
 		"collection_strings": prometheus.NewDesc("propgeo_collection_strings", "Total number of strings per collection", []string{"col"}, nil),
 		"collection_weight":  prometheus.NewDesc("propgeo_collection_weight_bytes", "Total weight of collection in bytes", []string{"col"}, nil),
 		"server_info":        prometheus.NewDesc("propgeo_server_info", "Server info", []string{"id", "version"}, nil),
+		"replication":        prometheus.NewDesc("propgeo_replication_info", "Replication info", []string{"role", "following", "caught_up", "caught_up_once"}, nil),
+		"start_time":         prometheus.NewDesc("propgeo_start_time_seconds", "", nil, nil),
 	}
 
 	cmdDurations = prometheus.NewSummaryVec(prometheus.SummaryOpts{
@@ -45,6 +52,14 @@ var (
 	}, []string{"cmd"},
 	)
 )
+
+func (s *Server) MetricsIndexHandler(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte(`<html><head>
+<title>PropGeo ` + core.Version + `</title></head>
+<body><h1>PropGeo ` + core.Version + `</h1>
+<p><a href='/metrics'>Metrics</a></p>
+</body></html>`))
+}
 
 func (s *Server) MetricsHandler(w http.ResponseWriter, r *http.Request) {
 	reg := prometheus.NewRegistry()
@@ -84,8 +99,23 @@ func (s *Server) Collect(ch chan<- prometheus.Metric) {
 
 	ch <- prometheus.MustNewConstMetric(
 		metricDescriptions["server_info"],
-		prometheus.GaugeValue, 1.0, s.config.serverID(), core.Version,
-	)
+		prometheus.GaugeValue, 1.0,
+		s.config.serverID(), core.Version)
+
+	ch <- prometheus.MustNewConstMetric(
+		metricDescriptions["start_time"],
+		prometheus.GaugeValue, float64(s.started.Unix()))
+
+	replLbls := []string{"leader", "", "", ""}
+	if s.config.followHost() != "" {
+		replLbls = []string{"follower",
+			fmt.Sprintf("%s:%d", s.config.followHost(), s.config.followPort()),
+			fmt.Sprintf("%t", s.fcup), fmt.Sprintf("%t", s.fcuponce)}
+	}
+	ch <- prometheus.MustNewConstMetric(
+		metricDescriptions["replication"],
+		prometheus.GaugeValue, 1.0,
+		replLbls...)
 
 	/*
 		add objects/points/strings stats for each collection
