@@ -15,11 +15,10 @@ require (
 	github.com/peterh/liner v1.2.1
 	github.com/streadway/amqp v1.0.0
 	github.com/tidwall/btree v0.4.2
-	github.com/tidwall/buntdb v1.2.1
+	github.com/tidwall/buntdb v1.2.2
 	github.com/tidwall/geoindex v1.4.3
 	github.com/tidwall/geojson v1.2.7
 	github.com/tidwall/gjson v1.7.4
-	github.com/tidwall/lotsa v1.0.2 // indirect
 	github.com/tidwall/match v1.0.3
 	github.com/tidwall/pretty v1.1.0
 	github.com/tidwall/redbench v0.1.0
@@ -29,8 +28,8 @@ require (
 	github.com/tidwall/rtree v1.2.7
 	github.com/tidwall/sjson v1.1.6
 	github.com/yuin/gopher-lua v0.0.0-20200816102855-ee81675732da
-	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
 	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
+	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 	google.golang.org/api v0.20.0
 	google.golang.org/grpc v1.35.0
 	layeh.com/gopher-json v0.0.0-20201124131017-552bb3c4c3bf

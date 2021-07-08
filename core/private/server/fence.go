@@ -164,19 +164,23 @@ func fenceMatch(
 		break
 	}
 	sw.mu.Lock()
-	var distance float64
+	var meters float64
+	distance := Distance{false, meters}
 	if fence.distance && fence.obj != nil {
-		distance = details.obj.Distance(fence.obj)
+		meters = details.obj.Distance(fence.obj)
+		distance.ready = true
+		distance.meters = meters
 	}
 	sw.fmap = details.fmap
 	sw.fullFields = true
 	sw.msg.OutputType = JSON
 	sw.writeObject(ScanWriterParams{
-		id:       details.id,
-		o:        details.obj,
-		fields:   details.fields,
-		noLock:   true,
-		distance: distance,
+		id:         details.id,
+		o:          details.obj,
+		fields:     details.fields,
+		noLock:     true,
+		distance:   distance,
+		distOutput: fence.distance,
 	})
 
 	if sw.wr.Len() == 0 {
