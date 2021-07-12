@@ -1,12 +1,10 @@
 package collection
 
 import (
-	"math"
 	"runtime"
 
 	"github.com/tidwall/btree"
 	"github.com/tidwall/geoindex"
-	"github.com/tidwall/geoindex/algo"
 	"github.com/tidwall/geojson"
 	"github.com/tidwall/geojson/geo"
 	"github.com/tidwall/geojson/geometry"
@@ -26,6 +24,7 @@ type Cursor interface {
 type itemT struct {
 	id              string
 	obj             geojson.Object
+	expires         int64 // unix nano expiration
 	fieldValuesSlot fieldValuesSlot
 }
 
@@ -46,11 +45,25 @@ func byValue(a, b interface{}) bool {
 	return byID(a, b)
 }
 
+func byExpires(a, b interface{}) bool {
+	item1 := a.(*itemT)
+	item2 := b.(*itemT)
+	if item1.expires < item2.expires {
+		return true
+	}
+	if item1.expires > item2.expires {
+		return false
+	}
+	// the values match so we'll compare IDs, which are always unique.
+	return byID(a, b)
+}
+
 // Collection represents a collection of geojson objects.
 type Collection struct {
-	items       *btree.BTree    // items sorted by keys
+	items       *btree.BTree    // items sorted by id
 	index       *geoindex.Index // items geospatially indexed
-	values      *btree.BTree    // items sorted by value+key
+	values      *btree.BTree    // items sorted by value+id
+	expires     *btree.BTree    // items sorted by ex+id
 	fieldMap    map[string]int
 	fieldArr    []string
 	fieldValues *fieldValues
@@ -66,6 +79,7 @@ func New() *Collection {
 		items:       btree.New(byID),
 		index:       geoindex.Wrap(&rtree.RTree{}),
 		values:      btree.New(byValue),
+		expires:     btree.New(byExpires),
 		fieldMap:    make(map[string]int),
 		fieldArr:    make([]string, 0),
 		fieldValues: &fieldValues{},
@@ -143,11 +157,11 @@ func (c *Collection) indexInsert(item *itemT) {
 // The fields argument is optional.
 // The return values are the old object, the old fields, and the new fields
 func (c *Collection) Set(
-	id string, obj geojson.Object, fields []string, values []float64,
+	id string, obj geojson.Object, fields []string, values []float64, ex int64,
 ) (
 	oldObject geojson.Object, oldFieldValues []float64, newFieldValues []float64,
 ) {
-	newItem := &itemT{id: id, obj: obj, fieldValuesSlot: nilValuesSlot}
+	newItem := &itemT{id: id, obj: obj, fieldValuesSlot: nilValuesSlot, expires: ex}
 
 	// add the new item to main btree and remove the old one if needed
 	oldItem := c.items.Set(newItem)
@@ -160,6 +174,10 @@ func (c *Collection) Set(
 		} else {
 			c.values.Delete(oldItem)
 			c.nobjects--
+		}
+		// delete old item from the expires queue
+		if oldItem.expires != 0 {
+			c.expires.Delete(oldItem)
 		}
 
 		// decrement the point count
@@ -193,6 +211,10 @@ func (c *Collection) Set(
 		c.values.Set(newItem)
 		c.nobjects++
 	}
+	// insert item into expires queue.
+	if newItem.expires != 0 {
+		c.expires.Set(newItem)
+	}
 
 	// increment the point count
 	c.points += newItem.obj.NumPoints()
@@ -208,11 +230,11 @@ func (c *Collection) Set(
 func (c *Collection) Delete(id string) (
 	obj geojson.Object, fields []float64, ok bool,
 ) {
-	oldItemV := c.items.Delete(&itemT{id: id})
-	if oldItemV == nil {
+	v := c.items.Delete(&itemT{id: id})
+	if v == nil {
 		return nil, nil, false
 	}
-	oldItem := oldItemV.(*itemT)
+	oldItem := v.(*itemT)
 	if objIsSpatial(oldItem.obj) {
 		if !oldItem.obj.Empty() {
 			c.indexDelete(oldItem)
@@ -221,6 +243,10 @@ func (c *Collection) Delete(id string) (
 	} else {
 		c.values.Delete(oldItem)
 		c.nobjects--
+	}
+	// delete old item from expires queue
+	if oldItem.expires != 0 {
+		c.expires.Delete(oldItem)
 	}
 	c.weight -= c.objWeight(oldItem)
 	c.points -= oldItem.obj.NumPoints()
@@ -233,14 +259,30 @@ func (c *Collection) Delete(id string) (
 // Get returns an object.
 // If the object does not exist then the 'ok' return value will be false.
 func (c *Collection) Get(id string) (
-	obj geojson.Object, fields []float64, ok bool,
+	obj geojson.Object, fields []float64, ex int64, ok bool,
 ) {
 	itemV := c.items.Get(&itemT{id: id})
 	if itemV == nil {
-		return nil, nil, false
+		return nil, nil, 0, false
 	}
 	item := itemV.(*itemT)
-	return item.obj, c.fieldValues.get(item.fieldValuesSlot), true
+	return item.obj, c.fieldValues.get(item.fieldValuesSlot), item.expires, true
+}
+
+func (c *Collection) SetExpires(id string, ex int64) bool {
+	v := c.items.Get(&itemT{id: id})
+	if v == nil {
+		return false
+	}
+	item := v.(*itemT)
+	if item.expires != 0 {
+		c.expires.Delete(item)
+	}
+	item.expires = ex
+	if item.expires != 0 {
+		c.expires.Set(item)
+	}
+	return true
 }
 
 // SetField set a field value for an object and returns that object.
@@ -489,7 +531,7 @@ func bGT(tr *btree.BTree, a, b interface{}) bool { return tr.Less(b, a) }
 func (c *Collection) ScanGreaterOrEqual(id string, desc bool,
 	cursor Cursor,
 	deadline *deadline.Deadline,
-	iterator func(id string, obj geojson.Object, fields []float64) bool,
+	iterator func(id string, obj geojson.Object, fields []float64, ex int64) bool,
 ) bool {
 	var keepon = true
 	var count uint64
@@ -498,14 +540,14 @@ func (c *Collection) ScanGreaterOrEqual(id string, desc bool,
 		offset = cursor.Offset()
 		cursor.Step(offset)
 	}
-	iter := func(value interface{}) bool {
+	iter := func(v interface{}) bool {
 		count++
 		if count <= offset {
 			return true
 		}
 		nextStep(count, cursor, deadline)
-		iitm := value.(*itemT)
-		keepon = iterator(iitm.id, iitm.obj, c.fieldValues.get(iitm.fieldValuesSlot))
+		item := v.(*itemT)
+		keepon = iterator(item.id, item.obj, c.fieldValues.get(item.fieldValuesSlot), item.expires)
 		return keepon
 	}
 	if desc {
@@ -743,7 +785,7 @@ func (c *Collection) Nearby(
 			}
 			nextStep(count, cursor, deadline)
 			item := itemv.(*itemT)
-			alive = iter(item.id, item.obj, c.getFieldValues(item.id), dist)
+			alive = iter(item.id, item.obj, c.fieldValues.get(item.fieldValuesSlot), dist)
 			return alive
 		},
 	)
@@ -760,122 +802,22 @@ func nextStep(step uint64, cursor Cursor, deadline *deadline.Deadline) {
 	}
 }
 
-func geodeticDistAlgo(center [2]float64) func(
-	min, max [2]float64, data interface{}, item bool,
-	add func(min, max [2]float64, data interface{}, item bool, dist float64),
-) {
-	const earthRadius = 6371e3
-	return func(
-		min, max [2]float64, data interface{}, item bool,
-		add func(min, max [2]float64, data interface{}, item bool, dist float64),
-	) {
-		add(min, max, data, item, earthRadius*pointRectDistGeodeticDeg(
-			center[1], center[0],
-			min[1], min[0],
-			max[1], max[0],
-		))
-	}
+type Expired struct {
+	ID     string
+	Obj    geojson.Object
+	Fields []float64
 }
 
-func pointRectDistGeodeticDeg(pLat, pLng, minLat, minLng, maxLat, maxLng float64) float64 {
-	result := pointRectDistGeodeticRad(
-		pLat*math.Pi/180, pLng*math.Pi/180,
-		minLat*math.Pi/180, minLng*math.Pi/180,
-		maxLat*math.Pi/180, maxLng*math.Pi/180,
-	)
-	return result
-}
-
-func pointRectDistGeodeticRad(φq, λq, φl, λl, φh, λh float64) float64 {
-	// Algorithm from:
-	// Schubert, E., Zimek, A., & Kriegel, H.-P. (2013).
-	// Geodetic Distance Queries on R-Trees for Indexing Geographic Data.
-	// Lecture Notes in Computer Science, 146–164.
-	// doi:10.1007/978-3-642-40235-7_9
-	const (
-		twoΠ  = 2 * math.Pi
-		halfΠ = math.Pi / 2
-	)
-
-	// distance on the unit sphere computed using Haversine formula
-	distRad := func(φa, λa, φb, λb float64) float64 {
-		if φa == φb && λa == λb {
-			return 0
+// Expired returns a list of all objects that have expired.
+func (c *Collection) Expired(now int64, buffer []string) (ids []string) {
+	ids = buffer[:0]
+	c.expires.Ascend(nil, func(v interface{}) bool {
+		item := v.(*itemT)
+		if now < item.expires {
+			return false
 		}
-
-		Δφ := φa - φb
-		Δλ := λa - λb
-		sinΔφ := math.Sin(Δφ / 2)
-		sinΔλ := math.Sin(Δλ / 2)
-		cosφa := math.Cos(φa)
-		cosφb := math.Cos(φb)
-
-		return 2 * math.Asin(math.Sqrt(sinΔφ*sinΔφ+sinΔλ*sinΔλ*cosφa*cosφb))
-	}
-
-	// Simple case, point or invalid rect
-	if φl >= φh && λl >= λh {
-		return distRad(φl, λl, φq, λq)
-	}
-
-	if λl <= λq && λq <= λh {
-		// q is between the bounding meridians of r
-		// hence, q is north, south or within r
-		if φl <= φq && φq <= φh { // Inside
-			return 0
-		}
-
-		if φq < φl { // South
-			return φl - φq
-		}
-
-		return φq - φh // North
-	}
-
-	// determine if q is closer to the east or west edge of r to select edge for
-	// tests below
-	Δλe := λl - λq
-	Δλw := λq - λh
-	if Δλe < 0 {
-		Δλe += twoΠ
-	}
-	if Δλw < 0 {
-		Δλw += twoΠ
-	}
-	var Δλ float64    // distance to closest edge
-	var λedge float64 // longitude of closest edge
-	if Δλe <= Δλw {
-		Δλ = Δλe
-		λedge = λl
-	} else {
-		Δλ = Δλw
-		λedge = λh
-	}
-
-	sinΔλ, cosΔλ := math.Sincos(Δλ)
-	tanφq := math.Tan(φq)
-
-	if Δλ >= halfΠ {
-		// If Δλ > 90 degrees (1/2 pi in radians) we're in one of the corners
-		// (NW/SW or NE/SE depending on the edge selected). Compare against the
-		// center line to decide which case we fall into
-		φmid := (φh + φl) / 2
-		if tanφq >= math.Tan(φmid)*cosΔλ {
-			return distRad(φq, λq, φh, λedge) // North corner
-		}
-		return distRad(φq, λq, φl, λedge) // South corner
-	}
-
-	if tanφq >= math.Tan(φh)*cosΔλ {
-		return distRad(φq, λq, φh, λedge) // North corner
-	}
-
-	if tanφq <= math.Tan(φl)*cosΔλ {
-		return distRad(φq, λq, φl, λedge) // South corner
-	}
-
-	// We're to the East or West of the rect, compute distance using cross-track
-	// Note that this is a simplification of the cross track distance formula
-	// valid since the track in question is a meridian.
-	return math.Asin(math.Cos(φq) * sinΔλ)
+		ids = append(ids, item.id)
+		return true
+	})
+	return ids
 }
