@@ -75,6 +75,7 @@ Basic Options:
   -h hostname : listening host
   -p port     : listening port (default: 9851)
   -d path     : data directory (default: data)
+  -s socket   : listen on unix socket file
   -q          : no logging. totally silent output
   -v          : enable verbose logging
   -vv         : enable very verbose logging
@@ -252,6 +253,7 @@ Developer Options:
 		dir         string
 		port        int
 		host        string
+		unixSocket  string
 		verbose     bool
 		veryVerbose bool
 		quiet       bool
@@ -261,13 +263,14 @@ Developer Options:
 		pprofport   int
 	)
 
-	flag.IntVar(&port, "p", 9851, "The listening port.")
+	flag.IntVar(&port, "p", 9851, "The listening port")
 	flag.StringVar(&pidfile, "pidfile", "", "A file that contains the pid")
-	flag.StringVar(&host, "h", "", "The listening host.")
-	flag.StringVar(&dir, "d", "data", "The data directory.")
-	flag.BoolVar(&verbose, "v", false, "Enable verbose logging.")
-	flag.BoolVar(&quiet, "q", false, "Quiet logging. Totally silent.")
-	flag.BoolVar(&veryVerbose, "vv", false, "Enable very verbose logging.")
+	flag.StringVar(&host, "h", "", "The listening host")
+	flag.StringVar(&unixSocket, "s", "", "Listen on a unix socket")
+	flag.StringVar(&dir, "d", "data", "The data directory")
+	flag.BoolVar(&verbose, "v", false, "Enable verbose logging")
+	flag.BoolVar(&quiet, "q", false, "Quiet logging. Totally silent")
+	flag.BoolVar(&veryVerbose, "vv", false, "Enable very verbose logging")
 	flag.IntVar(&pprofport, "pprofport", 0, "pprofport http at port")
 	flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to `file`")
 	flag.StringVar(&memprofile, "memprofile", "", "write memory profile to `file`")
@@ -277,7 +280,9 @@ Developer Options:
 	if quiet {
 		logw = ioutil.Discard
 	}
+
 	log.SetOutput(logw)
+
 	if quiet {
 		log.Level = 0
 	} else if veryVerbose {
@@ -344,6 +349,10 @@ Developer Options:
 		}()
 	}
 
+	if unixSocket != "" {
+		port = 0
+	}
+
 	// pid file
 	var pidferr error
 	var pidcleanedup bool
@@ -364,9 +373,7 @@ Developer Options:
 	}
 	defer pidcleanup()
 	if pidfile != "" {
-		pidferr := ioutil.WriteFile(pidfile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0666)
-		if pidferr == nil {
-		}
+		ioutil.WriteFile(pidfile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0666)
 	}
 
 	c := make(chan os.Signal, 1)
@@ -395,31 +402,43 @@ Developer Options:
 		}
 	}()
 
-	//  _____ _ _     ___ ___
-	// |_   _|_| |___|_  | . |
-	//   | | | | | -_|_  | . |
-	//   |_| |_|_|___|___|___|
+	var saddr string
+	if unixSocket != "" {
+		saddr = fmt.Sprintf("Socket: %s", unixSocket)
+	} else {
+		saddr = fmt.Sprintf("Port: %d", port)
+	}
+
 	fmt.Fprintf(logw, `
-   _______ _______
-  |       |       |
-  |____   |   _   |   PropGeo %s%s %d bit (%s/%s)
-  |       |       |   %sPort: %d, PID: %d
-  |____   |   _   | 
-  |       |       |   propgeo.com
-  |_______|_______| 
-`+"\n", core.Version, gitsha, strconv.IntSize, runtime.GOARCH, runtime.GOOS, hostd, port, os.Getpid())
+   _____ _ _     ___ ___
+  |_   _|_| |___|_  | . |  PropGeo %s%s %d bit (%s/%s)
+    | | | | | -_|_  | . |  %s%s, PID: %d
+    |_| |_|_|___|___|___|  propgeo.com
+
+Please consider sponsoring PropGeo development, especially if your company
+benefits from this software. Visit propgeo.com/sponsor today to learn more.
+
+`, core.Version, gitsha, strconv.IntSize, runtime.GOARCH, runtime.GOOS, hostd,
+		saddr, os.Getpid())
 
 	if pidferr != nil {
 		log.Warnf("pidfile: %v", pidferr)
 	}
 	if showEvioDisabled {
-		// we don't currently support evio in PropGeo
 		log.Warnf("evio is not currently supported")
 	}
 	if showThreadsDisabled {
 		log.Warnf("thread flag is deprecated use GOMAXPROCS to set number of threads instead")
 	}
-	if err := server.Serve(host, port, dir, httpTransport, *metricsAddr); err != nil {
+	opts := server.Options{
+		Host:           host,
+		Port:           port,
+		Dir:            dir,
+		UseHTTP:        httpTransport,
+		MetricsAddr:    *metricsAddr,
+		UnixSocketPath: unixSocket,
+	}
+	if err := server.Serve(opts); err != nil {
 		log.Fatal(err)
 	}
 }
