@@ -183,7 +183,10 @@ func (server *Server) cmdGet(msg *Message) (resp.Value, error) {
 			buf.Write(appendJSONSimplePoint(nil, o))
 		} else {
 			point := o.Center()
-			z := extractZCoordinate(o)
+			var z float64
+			if gPoint, ok := o.(*geojson.Point); ok {
+				z = gPoint.Z()
+			}
 			if z != 0 {
 				vals = append(vals, resp.ArrayValue([]resp.Value{
 					resp.StringValue(strconv.FormatFloat(point.Y, 'f', -1, 64)),
@@ -438,8 +441,7 @@ func (server *Server) cmdDrop(msg *Message) (res resp.Value, d commandDetails, e
 	return
 }
 
-func (server *Server) cmdRename(msg *Message) (res resp.Value, d commandDetails, err error) {
-	nx := msg.Command() == "renamenx"
+func (server *Server) cmdRename(msg *Message, nx bool) (res resp.Value, d commandDetails, err error) {
 	start := time.Now()
 	vs := msg.Args[1:]
 	var ok bool
@@ -460,14 +462,12 @@ func (server *Server) cmdRename(msg *Message) (res resp.Value, d commandDetails,
 		err = errKeyNotFound
 		return
 	}
-	server.hooks.Ascend(nil, func(v interface{}) bool {
-		h := v.(*Hook)
+	for _, h := range server.hooks {
 		if h.Key == d.key || h.Key == d.newKey {
 			err = errKeyHasHooksSet
-			return false
+			return
 		}
-		return true
-	})
+	}
 	d.command = "rename"
 	newCol := server.getCol(d.newKey)
 	if newCol == nil {
@@ -505,17 +505,13 @@ func (server *Server) cmdFlushDB(msg *Message) (res resp.Value, d commandDetails
 		err = errInvalidNumberOfArguments
 		return
 	}
-
-	// clear the entire database
 	server.cols = btree.NewNonConcurrent(byCollectionKey)
 	server.groupHooks = btree.NewNonConcurrent(byGroupHook)
 	server.groupObjects = btree.NewNonConcurrent(byGroupObject)
-	server.hookExpires = btree.NewNonConcurrent(byHookExpires)
-	server.hooks = btree.NewNonConcurrent(byHookName)
-	server.hooksOut = btree.NewNonConcurrent(byHookName)
+	server.hooks = make(map[string]*Hook)
+	server.hooksOut = make(map[string]*Hook)
 	server.hookTree = &rtree.RTree{}
 	server.hookCross = &rtree.RTree{}
-
 	d.command = "flushdb"
 	d.updated = true
 	d.timestamp = time.Now()

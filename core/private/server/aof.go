@@ -224,13 +224,11 @@ func (s *Server) writeAOF(args []string, d *commandDetails) error {
 func (s *Server) getQueueCandidates(d *commandDetails) []*Hook {
 	candidates := make(map[*Hook]bool)
 	// add the hooks with "outside" detection
-	s.hooksOut.Ascend(nil, func(v interface{}) bool {
-		hook := v.(*Hook)
+	for _, hook := range s.hooksOut {
 		if hook.Key == d.key {
 			candidates[hook] = true
 		}
-		return true
-	})
+	}
 	// look for candidates that might "cross" geofences
 	if d.oldObj != nil && d.obj != nil && s.hookCross.Len() > 0 {
 		r1, r2 := d.oldObj.Rect(), d.obj.Rect()

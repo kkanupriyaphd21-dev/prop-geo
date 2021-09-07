@@ -3,11 +3,11 @@ package server
 import (
 	"math"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/tidwall/btree"
 	"github.com/tidwall/geojson"
 	"github.com/tidwall/propgeo/core"
 	"github.com/tidwall/propgeo/internal/collection"
@@ -169,19 +169,17 @@ func (server *Server) aofshrink() {
 		func() {
 			server.mu.Lock()
 			defer server.mu.Unlock()
-			hnames = make([]string, 0, server.hooks.Len())
-			server.hooks.Walk(func(v []interface{}) {
-				for _, v := range v {
-					hnames = append(hnames, v.(*Hook).Name)
-				}
-			})
+			for name := range server.hooks {
+				hnames = append(hnames, name)
+			}
 		}()
-		var hookHint btree.PathHint
+		// sort the names for consistency
+		sort.Strings(hnames)
 		for _, name := range hnames {
 			func() {
 				server.mu.Lock()
 				defer server.mu.Unlock()
-				hook, _ := server.hooks.GetHint(name, &hookHint).(*Hook)
+				hook := server.hooks[name]
 				if hook == nil {
 					return
 				}
