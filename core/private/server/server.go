@@ -36,7 +36,6 @@ import (
 	"github.com/tidwall/propgeo/internal/collection"
 	"github.com/tidwall/propgeo/internal/deadline"
 	"github.com/tidwall/propgeo/internal/endpoint"
-	"github.com/tidwall/propgeo/internal/expire"
 	"github.com/tidwall/propgeo/internal/log"
 )
 
@@ -113,23 +112,23 @@ type Server struct {
 	lstack       []*commandDetails
 	lives        map[*liveBuffer]bool
 	lcond        *sync.Cond
-	fcup         bool             // follow caught up
-	fcuponce     bool             // follow caught up once
-	shrinking    bool             // aof shrinking flag
-	shrinklog    [][]string       // aof shrinking log
-	hooks        map[string]*Hook // hook name
-	hookCross    *rtree.RTree     // hook spatial tree for "cross" geofences
-	hookTree     *rtree.RTree     // hook spatial tree for all
-	hooksOut     map[string]*Hook // hooks with "outside" detection
-	groupHooks   *btree.BTree     // hooks that are connected to objects
-	groupObjects *btree.BTree     // objects that are connected to hooks
+	fcup         bool         // follow caught up
+	fcuponce     bool         // follow caught up once
+	shrinking    bool         // aof shrinking flag
+	shrinklog    [][]string   // aof shrinking log
+	hooks        *btree.BTree // hook name -- [string]*Hook
+	hookCross    *rtree.RTree // hook spatial tree for "cross" geofences
+	hookTree     *rtree.RTree // hook spatial tree for all
+	hooksOut     *btree.BTree // hooks with "outside" detection -- [string]*Hook
+	groupHooks   *btree.BTree // hooks that are connected to objects
+	groupObjects *btree.BTree // objects that are connected to hooks
+	hookExpires  *btree.BTree // queue of all hooks marked for expiration
 
 	aofconnM   map[net.Conn]io.Closer
 	luascripts *lScriptMap
 	luapool    *lStatePool
 
 	pubsub *pubsub
-	hookex expire.List
 
 	monconnsMu sync.RWMutex
 	monconns   map[net.Conn]bool // monitor connections
@@ -165,8 +164,8 @@ func Serve(opts Options) error {
 		fcond:     sync.NewCond(&sync.Mutex{}),
 		lives:     make(map[*liveBuffer]bool),
 		lcond:     sync.NewCond(&sync.Mutex{}),
-		hooks:     make(map[string]*Hook),
-		hooksOut:  make(map[string]*Hook),
+		hooks:     btree.NewNonConcurrent(byHookName),
+		hooksOut:  btree.NewNonConcurrent(byHookName),
 		hookCross: &rtree.RTree{},
 		hookTree:  &rtree.RTree{},
 		aofconnM:  make(map[net.Conn]io.Closer),
@@ -179,14 +178,9 @@ func Serve(opts Options) error {
 
 		groupHooks:   btree.NewNonConcurrent(byGroupHook),
 		groupObjects: btree.NewNonConcurrent(byGroupObject),
+		hookExpires:  btree.NewNonConcurrent(byHookExpires),
 	}
 
-	server.hookex.Expired = func(item expire.Item) {
-		switch v := item.(type) {
-		case *Hook:
-			server.possiblyExpireHook(v.Name)
-		}
-	}
 	server.epc = endpoint.NewManager(server)
 	server.luascripts = server.newScriptMap()
 	server.luapool = server.newPool()
@@ -965,7 +959,11 @@ func (server *Server) handleInputCommand(client *Client, msg *Message) error {
 				}
 			}()
 		}
-		return server.command(msg, client)
+		res, d, err = server.command(msg, client)
+		if msg.Deadline != nil {
+			msg.Deadline.Check()
+		}
+		return res, d, err
 	}()
 	if res.Type() == resp.Error {
 		return writeErr(res.String())
