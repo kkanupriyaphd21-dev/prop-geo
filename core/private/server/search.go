@@ -14,6 +14,7 @@ import (
 	"github.com/tidwall/geojson/geometry"
 	"github.com/tidwall/resp"
 	"github.com/tidwall/propgeo/internal/bing"
+	"github.com/tidwall/propgeo/internal/buffer"
 	"github.com/tidwall/propgeo/internal/clip"
 	"github.com/tidwall/propgeo/internal/glob"
 )
@@ -42,18 +43,18 @@ type roamMatch struct {
 	meters float64
 }
 
-func (s liveFenceSwitches) Error() string {
+func (lfs liveFenceSwitches) Error() string {
 	return goingLive
 }
 
-func (s liveFenceSwitches) Close() {
-	for _, whereeval := range s.whereevals {
+func (lfs liveFenceSwitches) Close() {
+	for _, whereeval := range lfs.whereevals {
 		whereeval.Close()
 	}
 }
 
-func (s liveFenceSwitches) usingLua() bool {
-	return len(s.whereevals) > 0
+func (lfs liveFenceSwitches) usingLua() bool {
+	return len(lfs.whereevals) > 0
 }
 
 func parseRectArea(ltyp string, vs []string) (nvs []string, rect *geojson.Rect, err error) {
@@ -169,43 +170,37 @@ func parseRectArea(ltyp string, vs []string) (nvs []string, rect *geojson.Rect, 
 	return
 }
 
-func (server *Server) cmdSearchArgs(
-	fromFenceCmd bool, cmd string, vs []string, types []string,
-) (s liveFenceSwitches, err error) {
+func (s *Server) cmdSearchArgs(
+	fromFenceCmd bool, cmd string, vs []string, types map[string]bool,
+) (lfs liveFenceSwitches, err error) {
 	var t searchScanBaseTokens
 	if fromFenceCmd {
 		t.fence = true
 	}
-	vs, t, err = server.parseSearchScanBaseTokens(cmd, t, vs)
+	vs, t, err = s.parseSearchScanBaseTokens(cmd, t, vs)
 	if err != nil {
 		return
 	}
-	s.searchScanBaseTokens = t
+	lfs.searchScanBaseTokens = t
 	var typ string
 	var ok bool
 	if vs, typ, ok = tokenval(vs); !ok || typ == "" {
 		err = errInvalidNumberOfArguments
 		return
 	}
-	if s.searchScanBaseTokens.output == outputBounds {
+	if lfs.searchScanBaseTokens.output == outputBounds {
 		if cmd == "within" || cmd == "intersects" {
 			if _, err := strconv.ParseFloat(typ, 64); err == nil {
 				// It's likely that the output was not specified, but rather the search bounds.
-				s.searchScanBaseTokens.output = defaultSearchOutput
+				lfs.searchScanBaseTokens.output = defaultSearchOutput
 				vs = append([]string{typ}, vs...)
 				typ = "BOUNDS"
 			}
 		}
 	}
 	ltyp := strings.ToLower(typ)
-	var found bool
-	for _, t := range types {
-		if ltyp == t {
-			found = true
-			break
-		}
-	}
-	if !found && s.searchScanBaseTokens.fence && ltyp == "roam" && cmd == "nearby" {
+	found := types[ltyp]
+	if !found && lfs.searchScanBaseTokens.fence && ltyp == "roam" && cmd == "nearby" {
 		// allow roaming for nearby fence searches.
 		found = true
 	}
@@ -215,12 +210,6 @@ func (server *Server) cmdSearchArgs(
 	}
 	switch ltyp {
 	case "point":
-		fallthrough
-	case "circle":
-		if s.clip {
-			err = errInvalidArgument("cannot clip with " + ltyp)
-			return
-		}
 		var slat, slon, smeters string
 		if vs, slat, ok = tokenval(vs); !ok || slat == "" {
 			err = errInvalidNumberOfArguments
@@ -242,34 +231,55 @@ func (server *Server) cmdSearchArgs(
 		// radius is optional for nearby, but mandatory for others
 		if cmd == "nearby" {
 			if vs, smeters, ok = tokenval(vs); ok && smeters != "" {
-				if meters, err = strconv.ParseFloat(smeters, 64); err != nil {
-					err = errInvalidArgument(smeters)
-					return
-				}
-				if meters < 0 {
+				meters, err = strconv.ParseFloat(smeters, 64)
+				if err != nil || meters < 0 {
 					err = errInvalidArgument(smeters)
 					return
 				}
 			} else {
 				meters = -1
 			}
+			// Nearby used the Circle type
+			lfs.obj = geojson.NewCircle(geometry.Point{X: lon, Y: lat}, meters, defaultCircleSteps)
 		} else {
-			if vs, smeters, ok = tokenval(vs); !ok || smeters == "" {
-				err = errInvalidNumberOfArguments
-				return
-			}
-			if meters, err = strconv.ParseFloat(smeters, 64); err != nil {
-				err = errInvalidArgument(smeters)
-				return
-			}
-			if meters < 0 {
-				err = errInvalidArgument(smeters)
-				return
-			}
+			// Intersects and Within use the Point type
+			lfs.obj = geojson.NewPoint(geometry.Point{X: lon, Y: lat})
 		}
-		s.obj = geojson.NewCircle(geometry.Point{X: lon, Y: lat}, meters, defaultCircleSteps)
+	case "circle":
+		if lfs.clip {
+			err = errInvalidArgument("cannot clip with " + ltyp)
+			return
+		}
+		var slat, slon, smeters string
+		if vs, slat, ok = tokenval(vs); !ok || slat == "" {
+			err = errInvalidNumberOfArguments
+			return
+		}
+		if vs, slon, ok = tokenval(vs); !ok || slon == "" {
+			err = errInvalidNumberOfArguments
+			return
+		}
+		var lat, lon, meters float64
+		if lat, err = strconv.ParseFloat(slat, 64); err != nil {
+			err = errInvalidArgument(slat)
+			return
+		}
+		if lon, err = strconv.ParseFloat(slon, 64); err != nil {
+			err = errInvalidArgument(slon)
+			return
+		}
+		if vs, smeters, ok = tokenval(vs); !ok || smeters == "" {
+			err = errInvalidNumberOfArguments
+			return
+		}
+		meters, err = strconv.ParseFloat(smeters, 64)
+		if err != nil || meters < 0 {
+			err = errInvalidArgument(smeters)
+			return
+		}
+		lfs.obj = geojson.NewCircle(geometry.Point{X: lon, Y: lat}, meters, defaultCircleSteps)
 	case "object":
-		if s.clip {
+		if lfs.clip {
 			err = errInvalidArgument("cannot clip with object")
 			return
 		}
@@ -278,12 +288,12 @@ func (server *Server) cmdSearchArgs(
 			err = errInvalidNumberOfArguments
 			return
 		}
-		s.obj, err = geojson.Parse(obj, &server.geomParseOpts)
+		lfs.obj, err = geojson.Parse(obj, &s.geomParseOpts)
 		if err != nil {
 			return
 		}
 	case "sector":
-		if s.clip {
+		if lfs.clip {
 			err = errInvalidArgument("cannot clip with " + ltyp)
 			return
 		}
@@ -338,17 +348,17 @@ func (server *Server) cmdSearchArgs(
 		origin := sectr.Point{Lng: lon, Lat: lat}
 		sector := sectr.NewSector(origin, meters, b1, b2)
 
-		s.obj, err = geojson.Parse(string(sector.JSON()), &server.geomParseOpts)
+		lfs.obj, err = geojson.Parse(string(sector.JSON()), &s.geomParseOpts)
 		if err != nil {
 			return
 		}
 	case "bounds", "hash", "tile", "quadkey":
-		vs, s.obj, err = parseRectArea(ltyp, vs)
+		vs, lfs.obj, err = parseRectArea(ltyp, vs)
 		if err != nil {
 			return
 		}
 	case "get":
-		if s.clip {
+		if lfs.clip {
 			err = errInvalidArgument("cannot clip with get")
 		}
 		var key, id string
@@ -360,33 +370,33 @@ func (server *Server) cmdSearchArgs(
 			err = errInvalidNumberOfArguments
 			return
 		}
-		col := server.getCol(key)
+		col := s.getCol(key)
 		if col == nil {
 			err = errKeyNotFound
 			return
 		}
-		s.obj, _, _, ok = col.Get(id)
+		lfs.obj, _, _, ok = col.Get(id)
 		if !ok {
 			err = errIDNotFound
 			return
 		}
 	case "roam":
-		s.roam.on = true
-		if vs, s.roam.key, ok = tokenval(vs); !ok || s.roam.key == "" {
+		lfs.roam.on = true
+		if vs, lfs.roam.key, ok = tokenval(vs); !ok || lfs.roam.key == "" {
 			err = errInvalidNumberOfArguments
 			return
 		}
-		if vs, s.roam.id, ok = tokenval(vs); !ok || s.roam.id == "" {
+		if vs, lfs.roam.id, ok = tokenval(vs); !ok || lfs.roam.id == "" {
 			err = errInvalidNumberOfArguments
 			return
 		}
-		s.roam.pattern = glob.IsGlob(s.roam.id)
+		lfs.roam.pattern = glob.IsGlob(lfs.roam.id)
 		var smeters string
 		if vs, smeters, ok = tokenval(vs); !ok || smeters == "" {
 			err = errInvalidNumberOfArguments
 			return
 		}
-		if s.roam.meters, err = strconv.ParseFloat(smeters, 64); err != nil {
+		if lfs.roam.meters, err = strconv.ParseFloat(smeters, 64); err != nil {
 			err = errInvalidArgument(smeters)
 			return
 		}
@@ -400,7 +410,7 @@ func (server *Server) cmdSearchArgs(
 				err = errInvalidNumberOfArguments
 				return
 			}
-			s.roam.scan = scan
+			lfs.roam.scan = scan
 		}
 	}
 
@@ -430,26 +440,38 @@ func (server *Server) cmdSearchArgs(
 			if err != nil {
 				return
 			}
-			s.obj = clip.Clip(s.obj, clip_rect, &server.geomIndexOpts)
+			lfs.obj = clip.Clip(lfs.obj, clip_rect, &s.geomIndexOpts)
 		default:
 			err = errInvalidArgument("cannot clipby " + ltok)
 			return
 		}
 	}
+
+	if lfs.hasbuffer {
+		lfs.obj, err = buffer.Simple(lfs.obj, lfs.buffer)
+		if err != nil {
+			return
+		}
+
+	}
 	return
 }
 
-var nearbyTypes = []string{"point"}
-var withinOrIntersectsTypes = []string{
-	"geo", "bounds", "hash", "tile", "quadkey", "get", "object", "circle", "sector"}
+var nearbyTypes = map[string]bool{
+	"point": true,
+}
+var withinOrIntersectsTypes = map[string]bool{
+	"geo": true, "bounds": true, "hash": true, "tile": true, "quadkey": true,
+	"get": true, "object": true, "circle": true, "point": true, "sector": true,
+}
 
-func (server *Server) cmdNearby(msg *Message) (res resp.Value, err error) {
+func (s *Server) cmdNearby(msg *Message) (res resp.Value, err error) {
 	start := time.Now()
 	vs := msg.Args[1:]
 	wr := &bytes.Buffer{}
-	s, err := server.cmdSearchArgs(false, "nearby", vs, nearbyTypes)
-	if s.usingLua() {
-		defer s.Close()
+	sargs, err := s.cmdSearchArgs(false, "nearby", vs, nearbyTypes)
+	if sargs.usingLua() {
+		defer sargs.Close()
 		defer func() {
 			if r := recover(); r != nil {
 				res = NOMessage
@@ -461,13 +483,13 @@ func (server *Server) cmdNearby(msg *Message) (res resp.Value, err error) {
 	if err != nil {
 		return NOMessage, err
 	}
-	s.cmd = "nearby"
-	if s.fence {
-		return NOMessage, s
+	sargs.cmd = "nearby"
+	if sargs.fence {
+		return NOMessage, sargs
 	}
-	sw, err := server.newScanWriter(
-		wr, msg, s.key, s.output, s.precision, s.glob, false,
-		s.cursor, s.limit, s.wheres, s.whereins, s.whereevals, s.nofields)
+	sw, err := s.newScanWriter(
+		wr, msg, sargs.key, sargs.output, sargs.precision, sargs.glob, false,
+		sargs.cursor, sargs.limit, sargs.wheres, sargs.whereins, sargs.whereevals, sargs.nofields)
 	if err != nil {
 		return NOMessage, err
 	}
@@ -482,14 +504,14 @@ func (server *Server) cmdNearby(msg *Message) (res resp.Value, err error) {
 				o:               o,
 				fields:          fields,
 				distance:        meters,
-				distOutput:      s.distance,
+				distOutput:      sargs.distance,
 				noLock:          true,
 				ignoreGlobMatch: true,
 				skipTesting:     true,
 			})
 		}
-		maxDist := s.obj.(*geojson.Circle).Meters()
-		if s.sparse > 0 {
+		maxDist := sargs.obj.(*geojson.Circle).Meters()
+		if sargs.sparse > 0 {
 			if maxDist < 0 {
 				// error cannot use SPARSE and KNN together
 				return NOMessage,
@@ -498,24 +520,24 @@ func (server *Server) cmdNearby(msg *Message) (res resp.Value, err error) {
 			// An intersects operation is required for SPARSE
 			iter := func(id string, o geojson.Object, fields []float64) bool {
 				var meters float64
-				if s.distance {
-					meters = o.Distance(s.obj)
+				if sargs.distance {
+					meters = o.Distance(sargs.obj)
 				}
 				return iterStep(id, o, fields, meters)
 			}
-			sw.col.Intersects(s.obj, s.sparse, sw, msg.Deadline, iter)
+			sw.col.Intersects(sargs.obj, sargs.sparse, sw, msg.Deadline, iter)
 		} else {
 			iter := func(id string, o geojson.Object, fields []float64, dist float64) bool {
 				if maxDist > 0 && dist > maxDist {
 					return false
 				}
 				var meters float64
-				if s.distance {
+				if sargs.distance {
 					meters = dist
 				}
 				return iterStep(id, o, fields, meters)
 			}
-			sw.col.Nearby(s.obj, sw, msg.Deadline, iter)
+			sw.col.Nearby(sargs.obj, sw, msg.Deadline, iter)
 		}
 	}
 	sw.writeFoot()
@@ -526,22 +548,22 @@ func (server *Server) cmdNearby(msg *Message) (res resp.Value, err error) {
 	return sw.respOut, nil
 }
 
-func (server *Server) cmdWithin(msg *Message) (res resp.Value, err error) {
-	return server.cmdWithinOrIntersects("within", msg)
+func (s *Server) cmdWithin(msg *Message) (res resp.Value, err error) {
+	return s.cmdWithinOrIntersects("within", msg)
 }
 
-func (server *Server) cmdIntersects(msg *Message) (res resp.Value, err error) {
-	return server.cmdWithinOrIntersects("intersects", msg)
+func (s *Server) cmdIntersects(msg *Message) (res resp.Value, err error) {
+	return s.cmdWithinOrIntersects("intersects", msg)
 }
 
-func (server *Server) cmdWithinOrIntersects(cmd string, msg *Message) (res resp.Value, err error) {
+func (s *Server) cmdWithinOrIntersects(cmd string, msg *Message) (res resp.Value, err error) {
 	start := time.Now()
 	vs := msg.Args[1:]
 
 	wr := &bytes.Buffer{}
-	s, err := server.cmdSearchArgs(false, cmd, vs, withinOrIntersectsTypes)
-	if s.usingLua() {
-		defer s.Close()
+	sargs, err := s.cmdSearchArgs(false, cmd, vs, withinOrIntersectsTypes)
+	if sargs.usingLua() {
+		defer sargs.Close()
 		defer func() {
 			if r := recover(); r != nil {
 				res = NOMessage
@@ -553,13 +575,13 @@ func (server *Server) cmdWithinOrIntersects(cmd string, msg *Message) (res resp.
 	if err != nil {
 		return NOMessage, err
 	}
-	s.cmd = cmd
-	if s.fence {
-		return NOMessage, s
+	sargs.cmd = cmd
+	if sargs.fence {
+		return NOMessage, sargs
 	}
-	sw, err := server.newScanWriter(
-		wr, msg, s.key, s.output, s.precision, s.glob, false,
-		s.cursor, s.limit, s.wheres, s.whereins, s.whereevals, s.nofields)
+	sw, err := s.newScanWriter(
+		wr, msg, sargs.key, sargs.output, sargs.precision, sargs.glob, false,
+		sargs.cursor, sargs.limit, sargs.wheres, sargs.whereins, sargs.whereevals, sargs.nofields)
 	if err != nil {
 		return NOMessage, err
 	}
@@ -569,7 +591,7 @@ func (server *Server) cmdWithinOrIntersects(cmd string, msg *Message) (res resp.
 	sw.writeHead()
 	if sw.col != nil {
 		if cmd == "within" {
-			sw.col.Within(s.obj, s.sparse, sw, msg.Deadline, func(
+			sw.col.Within(sargs.obj, sargs.sparse, sw, msg.Deadline, func(
 				id string, o geojson.Object, fields []float64,
 			) bool {
 				return sw.writeObject(ScanWriterParams{
@@ -580,7 +602,7 @@ func (server *Server) cmdWithinOrIntersects(cmd string, msg *Message) (res resp.
 				})
 			})
 		} else if cmd == "intersects" {
-			sw.col.Intersects(s.obj, s.sparse, sw, msg.Deadline, func(
+			sw.col.Intersects(sargs.obj, sargs.sparse, sw, msg.Deadline, func(
 				id string,
 				o geojson.Object,
 				fields []float64,
@@ -591,8 +613,8 @@ func (server *Server) cmdWithinOrIntersects(cmd string, msg *Message) (res resp.
 					fields: fields,
 					noLock: true,
 				}
-				if s.clip {
-					params.clip = s.obj
+				if sargs.clip {
+					params.clip = sargs.obj
 				}
 				return sw.writeObject(params)
 			})
@@ -606,15 +628,15 @@ func (server *Server) cmdWithinOrIntersects(cmd string, msg *Message) (res resp.
 	return sw.respOut, nil
 }
 
-func (server *Server) cmdSeachValuesArgs(vs []string) (
-	s liveFenceSwitches, err error,
+func (s *Server) cmdSeachValuesArgs(vs []string) (
+	lfs liveFenceSwitches, err error,
 ) {
 	var t searchScanBaseTokens
-	vs, t, err = server.parseSearchScanBaseTokens("search", t, vs)
+	vs, t, err = s.parseSearchScanBaseTokens("search", t, vs)
 	if err != nil {
 		return
 	}
-	s.searchScanBaseTokens = t
+	lfs.searchScanBaseTokens = t
 	if len(vs) != 0 {
 		err = errInvalidNumberOfArguments
 		return
@@ -622,14 +644,14 @@ func (server *Server) cmdSeachValuesArgs(vs []string) (
 	return
 }
 
-func (server *Server) cmdSearch(msg *Message) (res resp.Value, err error) {
+func (s *Server) cmdSearch(msg *Message) (res resp.Value, err error) {
 	start := time.Now()
 	vs := msg.Args[1:]
 
 	wr := &bytes.Buffer{}
-	s, err := server.cmdSeachValuesArgs(vs)
-	if s.usingLua() {
-		defer s.Close()
+	sargs, err := s.cmdSeachValuesArgs(vs)
+	if sargs.usingLua() {
+		defer sargs.Close()
 		defer func() {
 			if r := recover(); r != nil {
 				res = NOMessage
@@ -641,9 +663,9 @@ func (server *Server) cmdSearch(msg *Message) (res resp.Value, err error) {
 	if err != nil {
 		return NOMessage, err
 	}
-	sw, err := server.newScanWriter(
-		wr, msg, s.key, s.output, s.precision, s.glob, true,
-		s.cursor, s.limit, s.wheres, s.whereins, s.whereevals, s.nofields)
+	sw, err := s.newScanWriter(
+		wr, msg, sargs.key, sargs.output, sargs.precision, sargs.glob, true,
+		sargs.cursor, sargs.limit, sargs.wheres, sargs.whereins, sargs.whereevals, sargs.nofields)
 	if err != nil {
 		return NOMessage, err
 	}
@@ -653,15 +675,15 @@ func (server *Server) cmdSearch(msg *Message) (res resp.Value, err error) {
 	sw.writeHead()
 	if sw.col != nil {
 		if sw.output == outputCount && len(sw.wheres) == 0 && sw.globEverything {
-			count := sw.col.Count() - int(s.cursor)
+			count := sw.col.Count() - int(sargs.cursor)
 			if count < 0 {
 				count = 0
 			}
 			sw.count = uint64(count)
 		} else {
-			g := glob.Parse(sw.globPattern, s.desc)
+			g := glob.Parse(sw.globPattern, sargs.desc)
 			if g.Limits[0] == "" && g.Limits[1] == "" {
-				sw.col.SearchValues(s.desc, sw, msg.Deadline,
+				sw.col.SearchValues(sargs.desc, sw, msg.Deadline,
 					func(id string, o geojson.Object, fields []float64) bool {
 						return sw.writeObject(ScanWriterParams{
 							id:     id,
@@ -675,7 +697,7 @@ func (server *Server) cmdSearch(msg *Message) (res resp.Value, err error) {
 				// must disable globSingle for string value type matching because
 				// globSingle is only for ID matches, not values.
 				sw.globSingle = false
-				sw.col.SearchValuesRange(g.Limits[0], g.Limits[1], s.desc, sw,
+				sw.col.SearchValuesRange(g.Limits[0], g.Limits[1], sargs.desc, sw,
 					msg.Deadline,
 					func(id string, o geojson.Object, fields []float64) bool {
 						return sw.writeObject(ScanWriterParams{
