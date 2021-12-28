@@ -36,8 +36,12 @@ func SetOutput(w io.Writer) {
 func Build(c string) error {
 	if c == "" {
 		zcfg := zap.NewProductionConfig()
+
 		// to be able to filter with PropGeo levels
 		zcfg.Level.SetLevel(zap.DebugLevel)
+		// disable caller because caller is always log.go
+		zcfg.DisableCaller = true
+
 		core, err := zcfg.Build()
 		if err != nil {
 			return err
@@ -50,8 +54,12 @@ func Build(c string) error {
 		if err != nil {
 			return err
 		}
+
 		// to be able to filter with PropGeo levels
 		zcfg.Level.SetLevel(zap.DebugLevel)
+		// disable caller because caller is always log.go
+		zcfg.DisableCaller = true
+
 		core, err := zcfg.Build()
 		if err != nil {
 			return err
@@ -85,6 +93,27 @@ func log(level int, tag, color string, formatted bool, format string, args ...in
 	if Level < level {
 		return
 	}
+	var msg string
+	if formatted {
+		msg = fmt.Sprintf(format, args...)
+	} else {
+		msg = fmt.Sprint(args...)
+	}
+	if LogJSON {
+		switch tag {
+		case "ERRO":
+			logger.Error(msg)
+		case "FATA":
+			logger.Fatal(msg)
+		case "WARN":
+			logger.Warn(msg)
+		case "DEBU":
+			logger.Debug(msg)
+		default:
+			logger.Info(msg)
+		}
+		return
+	}
 	s := []byte(time.Now().Format("2006/01/02 15:04:05"))
 	s = append(s, ' ')
 	if tty {
@@ -97,11 +126,7 @@ func log(level int, tag, color string, formatted bool, format string, args ...in
 		s = append(s, "\x1b[0m"...)
 	}
 	s = append(s, ' ')
-	if formatted {
-		s = append(s, fmt.Sprintf(format, args...)...)
-	} else {
-		s = append(s, fmt.Sprint(args...)...)
-	}
+	s = append(s, msg...)
 	if s[len(s)-1] != '\n' {
 		s = append(s, '\n')
 	}
@@ -115,10 +140,6 @@ var emptyFormat string
 // Infof ...
 func Infof(format string, args ...interface{}) {
 	if Level >= 1 {
-		if LogJSON {
-			logger.Infof(format, args...)
-			return
-		}
 		log(1, "INFO", "\x1b[36m", true, format, args...)
 	}
 }
@@ -126,10 +147,6 @@ func Infof(format string, args ...interface{}) {
 // Info ...
 func Info(args ...interface{}) {
 	if Level >= 1 {
-		if LogJSON {
-			logger.Info(args...)
-			return
-		}
 		log(1, "INFO", "\x1b[36m", false, emptyFormat, args...)
 	}
 }
@@ -137,10 +154,6 @@ func Info(args ...interface{}) {
 // HTTPf ...
 func HTTPf(format string, args ...interface{}) {
 	if Level >= 1 {
-		if LogJSON {
-			logger.Infof(format, args...)
-			return
-		}
 		log(1, "HTTP", "\x1b[1m\x1b[30m", true, format, args...)
 	}
 }
@@ -148,10 +161,6 @@ func HTTPf(format string, args ...interface{}) {
 // HTTP ...
 func HTTP(args ...interface{}) {
 	if Level >= 1 {
-		if LogJSON {
-			logger.Info(args...)
-			return
-		}
 		log(1, "HTTP", "\x1b[1m\x1b[30m", false, emptyFormat, args...)
 	}
 }
@@ -159,10 +168,6 @@ func HTTP(args ...interface{}) {
 // Errorf ...
 func Errorf(format string, args ...interface{}) {
 	if Level >= 1 {
-		if LogJSON {
-			logger.Errorf(format, args...)
-			return
-		}
 		log(1, "ERRO", "\x1b[1m\x1b[31m", true, format, args...)
 	}
 }
@@ -170,10 +175,6 @@ func Errorf(format string, args ...interface{}) {
 // Error ..
 func Error(args ...interface{}) {
 	if Level >= 1 {
-		if LogJSON {
-			logger.Errorf(emptyFormat, args...)
-			return
-		}
 		log(1, "ERRO", "\x1b[1m\x1b[31m", false, emptyFormat, args...)
 	}
 }
@@ -181,10 +182,6 @@ func Error(args ...interface{}) {
 // Warnf ...
 func Warnf(format string, args ...interface{}) {
 	if Level >= 1 {
-		if LogJSON {
-			logger.Warnf(format, args...)
-			return
-		}
 		log(2, "WARN", "\x1b[33m", true, format, args...)
 	}
 }
@@ -192,10 +189,6 @@ func Warnf(format string, args ...interface{}) {
 // Warn ...
 func Warn(args ...interface{}) {
 	if Level >= 1 {
-		if LogJSON {
-			logger.Warnf(emptyFormat, args...)
-			return
-		}
 		log(2, "WARN", "\x1b[33m", false, emptyFormat, args...)
 	}
 }
@@ -203,10 +196,6 @@ func Warn(args ...interface{}) {
 // Debugf ...
 func Debugf(format string, args ...interface{}) {
 	if Level >= 3 {
-		if LogJSON {
-			logger.Debugf(format, args...)
-			return
-		}
 		log(3, "DEBU", "\x1b[35m", true, format, args...)
 	}
 }
@@ -214,10 +203,6 @@ func Debugf(format string, args ...interface{}) {
 // Debug ...
 func Debug(args ...interface{}) {
 	if Level >= 3 {
-		if LogJSON {
-			logger.Debugf(emptyFormat, args...)
-			return
-		}
 		log(3, "DEBU", "\x1b[35m", false, emptyFormat, args...)
 	}
 }
@@ -234,23 +219,12 @@ func Print(args ...interface{}) {
 
 // Fatalf ...
 func Fatalf(format string, args ...interface{}) {
-	if LogJSON {
-		logger.Fatalf(format, args...)
-		os.Exit(1)
-		return
-	}
-
 	log(1, "FATA", "\x1b[31m", true, format, args...)
 	os.Exit(1)
 }
 
 // Fatal ...
 func Fatal(args ...interface{}) {
-	if LogJSON {
-		logger.Fatalf(emptyFormat, args...)
-		os.Exit(1)
-		return
-	}
 	log(1, "FATA", "\x1b[31m", false, emptyFormat, args...)
 	os.Exit(1)
 }

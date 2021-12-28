@@ -432,15 +432,15 @@ Developer Options:
 			core.Version, gitsha, strconv.IntSize, runtime.GOARCH, runtime.GOOS, hostd, saddr, os.Getpid())
 	} else {
 		fmt.Fprintf(logw, `
-		_____ _ _     ___ ___
-		|_  _|_| |___|_  | . |	PropGeo %s%s %d bit (%s/%s)
-		 | | | | | -_|_  | . |  %s%s, PID: %d
-		 |_| |_|_|___|___|___|  propgeo.com
-	 
-	 Please consider sponsoring PropGeo development, especially if your company
-	 benefits from this software. Visit propgeo.com/sponsor today to learn more.
-	  
-	 `, core.Version, gitsha, strconv.IntSize, runtime.GOARCH, runtime.GOOS, hostd,
+   _____ _ _     ___ ___
+  |_   _|_| |___|_  | . |  PropGeo %s%s %d bit (%s/%s)
+    | | | | | -_|_  | . |  %s%s, PID: %d
+    |_| |_|_|___|___|___|  propgeo.com
+
+Please consider sponsoring PropGeo development, especially if your company
+benefits from this software. Visit propgeo.com/sponsor today to learn more.
+
+`, core.Version, gitsha, strconv.IntSize, runtime.GOARCH, runtime.GOOS, hostd,
 			saddr, os.Getpid())
 	}
 
