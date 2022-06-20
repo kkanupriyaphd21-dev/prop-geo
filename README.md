@@ -318,6 +318,7 @@ Clients that support most PropGeo features are marked with a ⭐️.
 - ⭐️ Go: [xjem/t38c](https://github.com/xjem/t38c)
 - ⭐️ Node.js: [node-propgeo](https://github.com/phulst/node-propgeo) ([example code](https://github.com/tidwall/propgeo/wiki/Node.js-example-(node-propgeo)))
 - ⭐️ Python: [pyle38](https://github.com/iwpnd/pyle38)
+- ⭐️ TypeScript: [propgeo-ts](https://github.com/tiermobility/propgeo-ts)
 - Go: [cjkreklow/t38c](https://github.com/cjkreklow/t38c)
 - Python: [pypropgeo](https://github.com/mitghi/pypropgeo)
 - Rust: [nazar](https://github.com/younisshah/nazar)
