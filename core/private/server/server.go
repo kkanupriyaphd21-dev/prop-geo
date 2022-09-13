@@ -100,19 +100,21 @@ type Server struct {
 	conns   map[int]*Client
 
 	mu       sync.RWMutex
-	aof      *os.File     // active aof file
-	aofdirty int32        // mark the aofbuf as having data
-	aofbuf   []byte       // prewrite buffer
-	aofsz    int          // active size of the aof file
-	qdb      *buntdb.DB   // hook queue log
-	qidx     uint64       // hook queue log last idx
-	cols     *btree.BTree // data collections
+	aof      *os.File   // active aof file
+	aofdirty int32      // mark the aofbuf as having data
+	aofbuf   []byte     // prewrite buffer
+	aofsz    int        // active size of the aof file
+	qdb      *buntdb.DB // hook queue log
+	qidx     uint64     // hook queue log last idx
+
+	cols *btree.Map[string, *collection.Collection] // data collections
 
 	follows      map[*bytes.Buffer]bool
 	fcond        *sync.Cond
 	lstack       []*commandDetails
 	lives        map[*liveBuffer]bool
 	lcond        *sync.Cond
+	lwait        sync.WaitGroup
 	fcup         bool         // follow caught up
 	fcuponce     bool         // follow caught up once
 	shrinking    bool         // aof shrinking flag
@@ -176,7 +178,7 @@ func Serve(opts Options) error {
 		http:      opts.UseHTTP,
 		pubsub:    newPubsub(),
 		monconns:  make(map[net.Conn]bool),
-		cols:      btree.NewNonConcurrent(byCollectionKey),
+		cols:      &btree.Map[string, *collection.Collection]{},
 
 		groupHooks:   btree.NewNonConcurrent(byGroupHook),
 		groupObjects: btree.NewNonConcurrent(byGroupObject),
@@ -312,6 +314,7 @@ func Serve(opts Options) error {
 		}()
 	}
 
+	s.lwait.Add(1)
 	go s.processLives()
 	go s.watchOutOfMemory()
 	go s.watchLuaStatePool()
@@ -322,11 +325,7 @@ func Serve(opts Options) error {
 		// Stop background routines
 		s.followc.add(1) // this will force any follow communication to die
 		s.stopServer.set(true)
-
-		// notify the live geofence connections that we are stopping.
-		s.lcond.L.Lock()
-		s.lcond.Wait()
-		s.lcond.L.Lock()
+		s.lwait.Wait()
 	}()
 
 	// Server is now loaded and ready. Wait for network error messages.
@@ -675,47 +674,6 @@ func (s *Server) backgroundSyncAOF() {
 	}
 }
 
-// collectionKeyContainer is a wrapper object around a collection that includes
-// the collection and the key. It's needed for support with the btree package,
-// which requires a comparator less function.
-type collectionKeyContainer struct {
-	key string
-	col *collection.Collection
-}
-
-func byCollectionKey(a, b interface{}) bool {
-	return a.(*collectionKeyContainer).key < b.(*collectionKeyContainer).key
-}
-
-func (s *Server) setCol(key string, col *collection.Collection) {
-	s.cols.Set(&collectionKeyContainer{key, col})
-}
-
-func (s *Server) getCol(key string) *collection.Collection {
-	if v := s.cols.Get(&collectionKeyContainer{key: key}); v != nil {
-		return v.(*collectionKeyContainer).col
-	}
-	return nil
-}
-
-func (s *Server) scanGreaterOrEqual(
-	key string, iterator func(key string, col *collection.Collection) bool,
-) {
-	s.cols.Ascend(&collectionKeyContainer{key: key},
-		func(v interface{}) bool {
-			vcol := v.(*collectionKeyContainer)
-			return iterator(vcol.key, vcol.col)
-		},
-	)
-}
-
-func (s *Server) deleteCol(key string) *collection.Collection {
-	if v := s.cols.Delete(&collectionKeyContainer{key: key}); v != nil {
-		return v.(*collectionKeyContainer).col
-	}
-	return nil
-}
-
 func isReservedFieldName(field string) bool {
 	switch field {
 	case "z", "lat", "lon":
@@ -1048,7 +1006,7 @@ func randomKey(n int) string {
 
 func (s *Server) reset() {
 	s.aofsz = 0
-	s.cols = btree.NewNonConcurrent(byCollectionKey)
+	s.cols.Clear()
 }
 
 func (s *Server) command(msg *Message, client *Client) (

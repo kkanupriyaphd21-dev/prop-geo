@@ -126,7 +126,7 @@ func (sw *scanWriter) loadWheres() {
 	sw.wheres = nil
 	sw.whereins = nil
 	sw.fvals = nil
-	sw.col = sw.s.getCol(sw.key)
+	sw.col, _ = sw.s.cols.Get(sw.key)
 	if sw.col != nil {
 		sw.fmap = sw.col.FieldMap()
 		sw.farr = sw.col.FieldArr()
@@ -380,7 +380,7 @@ func (sw *scanWriter) testObject(id string, o geojson.Object, fields []float64) 
 	return ok, true, nf
 }
 
-//id string, o geojson.Object, fields []float64, noLock bool
+// id string, o geojson.Object, fields []float64, noLock bool
 func (sw *scanWriter) writeObject(opts ScanWriterParams) bool {
 	if !opts.noLock {
 		sw.mu.Lock()
