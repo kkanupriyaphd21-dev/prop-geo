@@ -278,12 +278,11 @@ func (s *Server) parseArea(ovs []string, doClip bool) (vs []string, o geojson.Ob
 			err = errKeyNotFound
 			return
 		}
-		obj := col.Get(id)
-		if obj == nil {
+		o, _, _, ok = col.Get(id)
+		if !ok {
 			err = errIDNotFound
 			return
 		}
-		o = obj.Geo()
 	}
 	return
 }

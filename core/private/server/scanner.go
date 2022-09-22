@@ -5,16 +5,14 @@ import (
 	"errors"
 	"math"
 	"strconv"
+	"sync"
 
 	"github.com/mmcloughlin/geohash"
-	"github.com/tidwall/btree"
 	"github.com/tidwall/geojson"
 	"github.com/tidwall/resp"
 	"github.com/tidwall/propgeo/internal/clip"
 	"github.com/tidwall/propgeo/internal/collection"
-	"github.com/tidwall/propgeo/internal/field"
 	"github.com/tidwall/propgeo/internal/glob"
-	"github.com/tidwall/propgeo/internal/object"
 )
 
 const limitItems = 100
@@ -32,12 +30,15 @@ const (
 )
 
 type scanWriter struct {
+	mu             sync.Mutex
 	s              *Server
 	wr             *bytes.Buffer
-	name           string
+	key            string
 	msg            *Message
 	col            *collection.Collection
-	fkeys          btree.Set[string]
+	fmap           map[string]int
+	farr           []string
+	fvals          []float64
 	output         outputT
 	wheres         []whereT
 	whereins       []whereinT
@@ -57,13 +58,18 @@ type scanWriter struct {
 	values         []resp.Value
 	matchValues    bool
 	respOut        resp.Value
-	filled         []ScanWriterParams
+	orgWheres      []whereT
+	orgWhereins    []whereinT
 }
 
+// ScanWriterParams ...
 type ScanWriterParams struct {
-	obj             *object.Object
-	dist            float64
+	id              string
+	o               geojson.Object
+	fields          []float64
+	distance        float64
 	distOutput      bool // query or fence requested distance output
+	noLock          bool
 	noTest          bool
 	ignoreGlobMatch bool
 	clip            geojson.Object
@@ -71,7 +77,7 @@ type ScanWriterParams struct {
 }
 
 func (s *Server) newScanWriter(
-	wr *bytes.Buffer, msg *Message, name string, output outputT,
+	wr *bytes.Buffer, msg *Message, key string, output outputT,
 	precision uint64, globs []string, matchValues bool,
 	cursor, limit uint64, wheres []whereT, whereins []whereinT,
 	whereevals []whereevalT, nofields bool,
@@ -93,7 +99,7 @@ func (s *Server) newScanWriter(
 	sw := &scanWriter{
 		s:           s,
 		wr:          wr,
-		name:        name,
+		key:         key,
 		msg:         msg,
 		globs:       globs,
 		limit:       limit,
@@ -108,10 +114,48 @@ func (s *Server) newScanWriter(
 	if len(globs) == 0 || (len(globs) == 1 && globs[0] == "*") {
 		sw.globEverything = true
 	}
-	sw.wheres = wheres
-	sw.whereins = whereins
-	sw.col, _ = sw.s.cols.Get(sw.name)
+	sw.orgWheres = wheres
+	sw.orgWhereins = whereins
+	sw.loadWheres()
 	return sw, nil
+}
+
+func (sw *scanWriter) loadWheres() {
+	sw.fmap = nil
+	sw.farr = nil
+	sw.wheres = nil
+	sw.whereins = nil
+	sw.fvals = nil
+	sw.col, _ = sw.s.cols.Get(sw.key)
+	if sw.col != nil {
+		sw.fmap = sw.col.FieldMap()
+		sw.farr = sw.col.FieldArr()
+		// This fills index value in wheres/whereins
+		// so we don't have to map string field names for each tested object
+		var ok bool
+		if len(sw.orgWheres) > 0 {
+			sw.wheres = make([]whereT, len(sw.orgWheres))
+			for i, where := range sw.orgWheres {
+				if where.index, ok = sw.fmap[where.field]; !ok {
+					where.index = math.MaxInt32
+				}
+				sw.wheres[i] = where
+			}
+		}
+		if len(sw.orgWhereins) > 0 {
+			sw.whereins = make([]whereinT, len(sw.orgWhereins))
+			for i, wherein := range sw.orgWhereins {
+				if wherein.index, ok = sw.fmap[wherein.field]; !ok {
+					wherein.index = math.MaxInt32
+				}
+				sw.whereins[i] = wherein
+			}
+		}
+		if len(sw.farr) > 0 {
+			sw.fvals = make([]float64, len(sw.farr))
+		}
+	}
+
 }
 
 func (sw *scanWriter) hasFieldsOutput() bool {
@@ -123,20 +167,19 @@ func (sw *scanWriter) hasFieldsOutput() bool {
 	}
 }
 
-func (sw *scanWriter) writeFoot() {
+func (sw *scanWriter) writeHead() {
+	sw.mu.Lock()
+	defer sw.mu.Unlock()
 	switch sw.msg.OutputType {
 	case JSON:
-		if sw.fkeys.Len() > 0 && sw.hasFieldsOutput() {
+		if len(sw.farr) > 0 && sw.hasFieldsOutput() {
 			sw.wr.WriteString(`,"fields":[`)
-			var i int
-			sw.fkeys.Scan(func(name string) bool {
+			for i, field := range sw.farr {
 				if i > 0 {
 					sw.wr.WriteByte(',')
 				}
-				sw.wr.WriteString(jsonString(name))
-				i++
-				return true
-			})
+				sw.wr.WriteString(jsonString(field))
+			}
 			sw.wr.WriteByte(']')
 		}
 		switch sw.output {
@@ -155,11 +198,11 @@ func (sw *scanWriter) writeFoot() {
 		}
 	case RESP:
 	}
+}
 
-	for _, opts := range sw.filled {
-		sw.writeFilled(opts)
-	}
-
+func (sw *scanWriter) writeFoot() {
+	sw.mu.Lock()
+	defer sw.mu.Unlock()
 	cursor := sw.numberIters
 	if !sw.hitLimit {
 		cursor = 0
@@ -200,49 +243,103 @@ func extractZCoordinate(o geojson.Object) float64 {
 	}
 }
 
-func getFieldValue(o *object.Object, name string) field.Value {
-	if name == "z" {
-		z := extractZCoordinate(o.Geo())
-		return field.ValueOf(strconv.FormatFloat(z, 'f', -1, 64))
-	}
-	return o.Fields().Get(name).Value()
-}
-
-func (sw *scanWriter) fieldMatch(o *object.Object) (bool, error) {
-	for _, where := range sw.wheres {
-		if !where.match(getFieldValue(o, where.name)) {
-			return false, nil
+func (sw *scanWriter) fieldMatch(fields []float64, o geojson.Object) (fvals []float64, match bool) {
+	var z float64
+	var gotz bool
+	fvals = sw.fvals
+	if !sw.hasFieldsOutput() || sw.fullFields {
+		for _, where := range sw.wheres {
+			if where.field == "z" {
+				if !gotz {
+					z = extractZCoordinate(o)
+				}
+				if !where.match(z) {
+					return
+				}
+				continue
+			}
+			var value float64
+			if where.index < len(fields) {
+				value = fields[where.index]
+			}
+			if !where.match(value) {
+				return
+			}
 		}
-	}
-	for _, wherein := range sw.whereins {
-		if !wherein.match(getFieldValue(o, wherein.name)) {
-			return false, nil
+		for _, wherein := range sw.whereins {
+			var value float64
+			if wherein.index < len(fields) {
+				value = fields[wherein.index]
+			}
+			if !wherein.match(value) {
+				return
+			}
 		}
-	}
-	if len(sw.whereevals) > 0 {
-		fieldNames := make(map[string]field.Value)
-		if objIsSpatial(o.Geo()) {
-			z := extractZCoordinate(o.Geo())
-			fieldNames["z"] = field.ValueOf(strconv.FormatFloat(z, 'f', -1, 64))
-		}
-		o.Fields().Scan(func(f field.Field) bool {
-			fieldNames[f.Name()] = f.Value()
-			return true
-		})
 		for _, whereval := range sw.whereevals {
-			match, err := whereval.match(fieldNames)
-			if err != nil {
-				return false, err
+			fieldsWithNames := make(map[string]float64)
+			for field, idx := range sw.fmap {
+				if idx < len(fields) {
+					fieldsWithNames[field] = fields[idx]
+				} else {
+					fieldsWithNames[field] = 0
+				}
 			}
-			if !match {
-				return false, nil
+			if !whereval.match(fieldsWithNames) {
+				return
+			}
+		}
+	} else {
+		copy(sw.fvals, fields)
+		// fields might be shorter for this item, need to pad sw.fvals with zeros
+		for i := len(fields); i < len(sw.fvals); i++ {
+			sw.fvals[i] = 0
+		}
+		for _, where := range sw.wheres {
+			if where.field == "z" {
+				if !gotz {
+					z = extractZCoordinate(o)
+				}
+				if !where.match(z) {
+					return
+				}
+				continue
+			}
+			var value float64
+			if where.index < len(sw.fvals) {
+				value = sw.fvals[where.index]
+			}
+			if !where.match(value) {
+				return
+			}
+		}
+		for _, wherein := range sw.whereins {
+			var value float64
+			if wherein.index < len(sw.fvals) {
+				value = sw.fvals[wherein.index]
+			}
+			if !wherein.match(value) {
+				return
+			}
+		}
+		for _, whereval := range sw.whereevals {
+			fieldsWithNames := make(map[string]float64)
+			for field, idx := range sw.fmap {
+				if idx < len(fields) {
+					fieldsWithNames[field] = fields[idx]
+				} else {
+					fieldsWithNames[field] = 0
+				}
+			}
+			if !whereval.match(fieldsWithNames) {
+				return
 			}
 		}
 	}
-	return true, nil
+	match = true
+	return
 }
 
-func (sw *scanWriter) globMatch(o *object.Object) (ok, keepGoing bool) {
+func (sw *scanWriter) globMatch(id string, o geojson.Object) (ok, keepGoing bool) {
 	if sw.globEverything {
 		return true, true
 	}
@@ -250,7 +347,7 @@ func (sw *scanWriter) globMatch(o *object.Object) (ok, keepGoing bool) {
 	if sw.matchValues {
 		val = o.String()
 	} else {
-		val = o.ID()
+		val = id
 	}
 	for _, pattern := range sw.globs {
 		ok, _ := glob.Match(pattern, val)
@@ -259,6 +356,7 @@ func (sw *scanWriter) globMatch(o *object.Object) (ok, keepGoing bool) {
 		}
 	}
 	return false, true
+
 }
 
 // Increment cursor
@@ -272,71 +370,38 @@ func (sw *scanWriter) Step(n uint64) {
 
 // ok is whether the object passes the test and should be written
 // keepGoing is whether there could be more objects to test
-func (sw *scanWriter) testObject(o *object.Object,
-) (ok, keepGoing bool, err error) {
-	match, kg := sw.globMatch(o)
+func (sw *scanWriter) testObject(id string, o geojson.Object, fields []float64) (
+	ok, keepGoing bool, fieldVals []float64) {
+	match, kg := sw.globMatch(id, o)
 	if !match {
-		return false, kg, nil
+		return false, kg, fieldVals
 	}
-	ok, err = sw.fieldMatch(o)
-	if err != nil {
-		return false, false, err
-	}
-	return ok, true, nil
+	nf, ok := sw.fieldMatch(fields, o)
+	return ok, true, nf
 }
 
-func (sw *scanWriter) pushObject(opts ScanWriterParams) (keepGoing bool, err error) {
-	keepGoing = true
+// id string, o geojson.Object, fields []float64, noLock bool
+func (sw *scanWriter) writeObject(opts ScanWriterParams) bool {
+	if !opts.noLock {
+		sw.mu.Lock()
+		defer sw.mu.Unlock()
+	}
+
+	keepGoing := true
 	if !opts.noTest {
 		var ok bool
-		var err error
-		ok, keepGoing, err = sw.testObject(opts.obj)
-		if err != nil {
-			return false, err
-		}
+		ok, keepGoing, _ = sw.testObject(opts.id, opts.o, opts.fields)
 		if !ok {
-			return keepGoing, nil
+			return keepGoing
 		}
 	}
 	sw.count++
 	if sw.output == outputCount {
-		return sw.count < sw.limit, nil
+		return sw.count < sw.limit
 	}
 	if opts.clip != nil {
-		// create a newly clipped object
-		opts.obj = object.New(
-			opts.obj.ID(),
-			clip.Clip(opts.obj.Geo(), opts.clip, &sw.s.geomIndexOpts),
-			opts.obj.Expires(),
-			opts.obj.Fields(),
-		)
+		opts.o = clip.Clip(opts.o, opts.clip, &sw.s.geomIndexOpts)
 	}
-
-	if !sw.fullFields {
-		opts.obj.Fields().Scan(func(f field.Field) bool {
-			sw.fkeys.Insert(f.Name())
-			return true
-		})
-	}
-	sw.filled = append(sw.filled, opts)
-	sw.numberItems++
-	if sw.numberItems == sw.limit {
-		sw.hitLimit = true
-		return false, nil
-	}
-	return keepGoing, nil
-}
-
-func (sw *scanWriter) writeObject(opts ScanWriterParams) {
-	n := len(sw.filled)
-	sw.pushObject(opts)
-	if len(sw.filled) > n {
-		sw.writeFilled(sw.filled[len(sw.filled)-1])
-		sw.filled = sw.filled[:n]
-	}
-}
-
-func (sw *scanWriter) writeFilled(opts ScanWriterParams) {
 	switch sw.msg.OutputType {
 	case JSON:
 		var wr bytes.Buffer
@@ -346,61 +411,67 @@ func (sw *scanWriter) writeFilled(opts ScanWriterParams) {
 		} else {
 			sw.once = true
 		}
-		fieldsOutput := sw.hasFieldsOutput()
-		if fieldsOutput && sw.fullFields {
-			if opts.obj.Fields().Len() > 0 {
-				jsfields = `,"fields":{`
-				var i int
-				opts.obj.Fields().Scan(func(f field.Field) bool {
-					if !f.Value().IsZero() {
-						if i > 0 {
-							jsfields += `,`
+		if sw.hasFieldsOutput() {
+			if sw.fullFields {
+				if len(sw.fmap) > 0 {
+					jsfields = `,"fields":{`
+					var i int
+					for field, idx := range sw.fmap {
+						if len(opts.fields) > idx {
+							if opts.fields[idx] != 0 {
+								if i > 0 {
+									jsfields += `,`
+								}
+								jsfields += jsonString(field) + ":" + strconv.FormatFloat(opts.fields[idx], 'f', -1, 64)
+								i++
+							}
 						}
-						jsfields += jsonString(f.Name()) + ":" + f.Value().JSON()
-						i++
 					}
-					return true
-				})
-				jsfields += `}`
-			}
-		} else if fieldsOutput && sw.fkeys.Len() > 0 && !sw.fullFields {
-			jsfields = `,"fields":[`
-			var i int
-			sw.fkeys.Scan(func(name string) bool {
-				if i > 0 {
-					jsfields += `,`
+					jsfields += `}`
 				}
-				f := opts.obj.Fields().Get(name)
-				jsfields += f.Value().JSON()
-				i++
-				return true
-			})
-			jsfields += `]`
+
+			} else if len(sw.farr) > 0 {
+				jsfields = `,"fields":[`
+				for i, name := range sw.farr {
+					if i > 0 {
+						jsfields += `,`
+					}
+					j := sw.fmap[name]
+					if j < len(opts.fields) {
+						jsfields += strconv.FormatFloat(opts.fields[j], 'f', -1, 64)
+					} else {
+						jsfields += "0"
+					}
+				}
+				jsfields += `]`
+			}
 		}
 		if sw.output == outputIDs {
-			if opts.distOutput || opts.dist > 0 {
-				wr.WriteString(`{"id":` + jsonString(opts.obj.ID()) +
-					`,"distance":` + strconv.FormatFloat(opts.dist, 'f', -1, 64) + "}")
+			if opts.distOutput || opts.distance > 0 {
+				wr.WriteString(`{"id":` + jsonString(opts.id) +
+					`,"distance":` + strconv.FormatFloat(opts.distance, 'f', -1, 64) + "}")
 			} else {
-				wr.WriteString(jsonString(opts.obj.ID()))
+				wr.WriteString(jsonString(opts.id))
 			}
 		} else {
-			wr.WriteString(`{"id":` + jsonString(opts.obj.ID()))
+			wr.WriteString(`{"id":` + jsonString(opts.id))
 			switch sw.output {
 			case outputObjects:
-				wr.WriteString(`,"object":` + string(opts.obj.Geo().AppendJSON(nil)))
+				wr.WriteString(`,"object":` + string(opts.o.AppendJSON(nil)))
 			case outputPoints:
-				wr.WriteString(`,"point":` + string(appendJSONSimplePoint(nil, opts.obj.Geo())))
+				wr.WriteString(`,"point":` + string(appendJSONSimplePoint(nil, opts.o)))
 			case outputHashes:
-				center := opts.obj.Geo().Center()
+				center := opts.o.Center()
 				p := geohash.EncodeWithPrecision(center.Y, center.X, uint(sw.precision))
 				wr.WriteString(`,"hash":"` + p + `"`)
 			case outputBounds:
-				wr.WriteString(`,"bounds":` + string(appendJSONSimpleBounds(nil, opts.obj.Geo())))
+				wr.WriteString(`,"bounds":` + string(appendJSONSimpleBounds(nil, opts.o)))
 			}
+
 			wr.WriteString(jsfields)
-			if opts.distOutput || opts.dist > 0 {
-				wr.WriteString(`,"distance":` + strconv.FormatFloat(opts.dist, 'f', -1, 64))
+
+			if opts.distOutput || opts.distance > 0 {
+				wr.WriteString(`,"distance":` + strconv.FormatFloat(opts.distance, 'f', -1, 64))
 			}
 
 			wr.WriteString(`}`)
@@ -408,10 +479,10 @@ func (sw *scanWriter) writeFilled(opts ScanWriterParams) {
 		sw.wr.Write(wr.Bytes())
 	case RESP:
 		vals := make([]resp.Value, 1, 3)
-		vals[0] = resp.StringValue(opts.obj.ID())
+		vals[0] = resp.StringValue(opts.id)
 		if sw.output == outputIDs {
-			if opts.distOutput || opts.dist > 0 {
-				vals = append(vals, resp.FloatValue(opts.dist))
+			if opts.distOutput || opts.distance > 0 {
+				vals = append(vals, resp.FloatValue(opts.distance))
 				sw.values = append(sw.values, resp.ArrayValue(vals))
 			} else {
 				sw.values = append(sw.values, vals[0])
@@ -419,10 +490,10 @@ func (sw *scanWriter) writeFilled(opts ScanWriterParams) {
 		} else {
 			switch sw.output {
 			case outputObjects:
-				vals = append(vals, resp.StringValue(opts.obj.String()))
+				vals = append(vals, resp.StringValue(opts.o.String()))
 			case outputPoints:
-				point := opts.obj.Geo().Center()
-				z := extractZCoordinate(opts.obj.Geo())
+				point := opts.o.Center()
+				z := extractZCoordinate(opts.o)
 				if z != 0 {
 					vals = append(vals, resp.ArrayValue([]resp.Value{
 						resp.FloatValue(point.Y),
@@ -436,11 +507,11 @@ func (sw *scanWriter) writeFilled(opts ScanWriterParams) {
 					}))
 				}
 			case outputHashes:
-				center := opts.obj.Geo().Center()
+				center := opts.o.Center()
 				p := geohash.EncodeWithPrecision(center.Y, center.X, uint(sw.precision))
 				vals = append(vals, resp.StringValue(p))
 			case outputBounds:
-				bbox := opts.obj.Rect()
+				bbox := opts.o.Rect()
 				vals = append(vals, resp.ArrayValue([]resp.Value{
 					resp.ArrayValue([]resp.Value{
 						resp.FloatValue(bbox.Min.Y),
@@ -452,24 +523,29 @@ func (sw *scanWriter) writeFilled(opts ScanWriterParams) {
 					}),
 				}))
 			}
+
 			if sw.hasFieldsOutput() {
-				var fvals []resp.Value
-				var i int
-				opts.obj.Fields().Scan(func(f field.Field) bool {
-					if !f.Value().IsZero() {
-						fvals = append(fvals, resp.StringValue(f.Name()), resp.StringValue(f.Value().Data()))
+				fvs := orderFields(sw.fmap, sw.farr, opts.fields)
+				if len(fvs) > 0 {
+					fvals := make([]resp.Value, 0, len(fvs)*2)
+					for i, fv := range fvs {
+						fvals = append(fvals, resp.StringValue(fv.field), resp.StringValue(strconv.FormatFloat(fv.value, 'f', -1, 64)))
 						i++
 					}
-					return true
-				})
-				if len(fvals) > 0 {
 					vals = append(vals, resp.ArrayValue(fvals))
 				}
 			}
-			if opts.distOutput || opts.dist > 0 {
-				vals = append(vals, resp.FloatValue(opts.dist))
+			if opts.distOutput || opts.distance > 0 {
+				vals = append(vals, resp.FloatValue(opts.distance))
 			}
+
 			sw.values = append(sw.values, resp.ArrayValue(vals))
 		}
 	}
+	sw.numberItems++
+	if sw.numberItems == sw.limit {
+		sw.hitLimit = true
+		return false
+	}
+	return keepGoing
 }

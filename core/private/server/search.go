@@ -17,7 +17,6 @@ import (
 	"github.com/tidwall/propgeo/internal/buffer"
 	"github.com/tidwall/propgeo/internal/clip"
 	"github.com/tidwall/propgeo/internal/glob"
-	"github.com/tidwall/propgeo/internal/object"
 )
 
 const defaultCircleSteps = 64
@@ -376,12 +375,11 @@ func (s *Server) cmdSearchArgs(
 			err = errKeyNotFound
 			return
 		}
-		o := col.Get(id)
-		if o == nil {
+		lfs.obj, _, _, ok = col.Get(id)
+		if !ok {
 			err = errIDNotFound
 			return
 		}
-		lfs.obj = o.Geo()
 	case "roam":
 		lfs.roam.on = true
 		if vs, lfs.roam.key, ok = tokenval(vs); !ok || lfs.roam.key == "" {
@@ -498,21 +496,19 @@ func (s *Server) cmdNearby(msg *Message) (res resp.Value, err error) {
 	if msg.OutputType == JSON {
 		wr.WriteString(`{"ok":true`)
 	}
-	var ierr error
+	sw.writeHead()
 	if sw.col != nil {
-		iterStep := func(o *object.Object, dist float64) bool {
-			keepGoing, err := sw.pushObject(ScanWriterParams{
-				obj:             o,
-				dist:            dist,
+		iterStep := func(id string, o geojson.Object, fields []float64, meters float64) bool {
+			return sw.writeObject(ScanWriterParams{
+				id:              id,
+				o:               o,
+				fields:          fields,
+				distance:        meters,
 				distOutput:      sargs.distance,
+				noLock:          true,
 				ignoreGlobMatch: true,
 				skipTesting:     true,
 			})
-			if err != nil {
-				ierr = err
-				return false
-			}
-			return keepGoing
 		}
 		maxDist := sargs.obj.(*geojson.Circle).Meters()
 		if sargs.sparse > 0 {
@@ -522,16 +518,16 @@ func (s *Server) cmdNearby(msg *Message) (res resp.Value, err error) {
 					errors.New("cannot use SPARSE without a point distance")
 			}
 			// An intersects operation is required for SPARSE
-			iter := func(o *object.Object) bool {
-				var dist float64
+			iter := func(id string, o geojson.Object, fields []float64) bool {
+				var meters float64
 				if sargs.distance {
-					dist = o.Geo().Distance(sargs.obj)
+					meters = o.Distance(sargs.obj)
 				}
-				return iterStep(o, dist)
+				return iterStep(id, o, fields, meters)
 			}
 			sw.col.Intersects(sargs.obj, sargs.sparse, sw, msg.Deadline, iter)
 		} else {
-			iter := func(o *object.Object, dist float64) bool {
+			iter := func(id string, o geojson.Object, fields []float64, dist float64) bool {
 				if maxDist > 0 && dist > maxDist {
 					return false
 				}
@@ -539,13 +535,10 @@ func (s *Server) cmdNearby(msg *Message) (res resp.Value, err error) {
 				if sargs.distance {
 					meters = dist
 				}
-				return iterStep(o, meters)
+				return iterStep(id, o, fields, meters)
 			}
 			sw.col.Nearby(sargs.obj, sw, msg.Deadline, iter)
 		}
-	}
-	if ierr != nil {
-		return retrerr(ierr)
 	}
 	sw.writeFoot()
 	if msg.OutputType == JSON {
@@ -555,15 +548,15 @@ func (s *Server) cmdNearby(msg *Message) (res resp.Value, err error) {
 	return sw.respOut, nil
 }
 
-func (s *Server) cmdWITHIN(msg *Message) (res resp.Value, err error) {
-	return s.cmdWITHINorINTERSECTS("within", msg)
+func (s *Server) cmdWithin(msg *Message) (res resp.Value, err error) {
+	return s.cmdWithinOrIntersects("within", msg)
 }
 
-func (s *Server) cmdINTERSECTS(msg *Message) (res resp.Value, err error) {
-	return s.cmdWITHINorINTERSECTS("intersects", msg)
+func (s *Server) cmdIntersects(msg *Message) (res resp.Value, err error) {
+	return s.cmdWithinOrIntersects("intersects", msg)
 }
 
-func (s *Server) cmdWITHINorINTERSECTS(cmd string, msg *Message) (res resp.Value, err error) {
+func (s *Server) cmdWithinOrIntersects(cmd string, msg *Message) (res resp.Value, err error) {
 	start := time.Now()
 	vs := msg.Args[1:]
 
@@ -595,38 +588,37 @@ func (s *Server) cmdWITHINorINTERSECTS(cmd string, msg *Message) (res resp.Value
 	if msg.OutputType == JSON {
 		wr.WriteString(`{"ok":true`)
 	}
-	var ierr error
+	sw.writeHead()
 	if sw.col != nil {
 		if cmd == "within" {
-			sw.col.Within(sargs.obj, sargs.sparse, sw, msg.Deadline,
-				func(o *object.Object) bool {
-					keepGoing, err := sw.pushObject(ScanWriterParams{obj: o})
-					if err != nil {
-						ierr = err
-						return false
-					}
-					return keepGoing
-				},
-			)
+			sw.col.Within(sargs.obj, sargs.sparse, sw, msg.Deadline, func(
+				id string, o geojson.Object, fields []float64,
+			) bool {
+				return sw.writeObject(ScanWriterParams{
+					id:     id,
+					o:      o,
+					fields: fields,
+					noLock: true,
+				})
+			})
 		} else if cmd == "intersects" {
-			sw.col.Intersects(sargs.obj, sargs.sparse, sw, msg.Deadline,
-				func(o *object.Object) bool {
-					params := ScanWriterParams{obj: o}
-					if sargs.clip {
-						params.clip = sargs.obj
-					}
-					keepGoing, err := sw.pushObject(params)
-					if err != nil {
-						ierr = err
-						return false
-					}
-					return keepGoing
-				},
-			)
+			sw.col.Intersects(sargs.obj, sargs.sparse, sw, msg.Deadline, func(
+				id string,
+				o geojson.Object,
+				fields []float64,
+			) bool {
+				params := ScanWriterParams{
+					id:     id,
+					o:      o,
+					fields: fields,
+					noLock: true,
+				}
+				if sargs.clip {
+					params.clip = sargs.obj
+				}
+				return sw.writeObject(params)
+			})
 		}
-	}
-	if ierr != nil {
-		return retrerr(ierr)
 	}
 	sw.writeFoot()
 	if msg.OutputType == JSON {
@@ -709,7 +701,7 @@ func (s *Server) cmdSearch(msg *Message) (res resp.Value, err error) {
 	if msg.OutputType == JSON {
 		wr.WriteString(`{"ok":true`)
 	}
-	var ierr error
+	sw.writeHead()
 	if sw.col != nil {
 		if sw.output == outputCount && len(sw.wheres) == 0 && sw.globEverything {
 			count := sw.col.Count() - int(sargs.cursor)
@@ -721,15 +713,13 @@ func (s *Server) cmdSearch(msg *Message) (res resp.Value, err error) {
 			limits := multiGlobParse(sw.globs, sargs.desc)
 			if limits[0] == "" && limits[1] == "" {
 				sw.col.SearchValues(sargs.desc, sw, msg.Deadline,
-					func(o *object.Object) bool {
-						keepGoing, err := sw.pushObject(ScanWriterParams{
-							obj: o,
+					func(id string, o geojson.Object, fields []float64) bool {
+						return sw.writeObject(ScanWriterParams{
+							id:     id,
+							o:      o,
+							fields: fields,
+							noLock: true,
 						})
-						if err != nil {
-							ierr = err
-							return false
-						}
-						return keepGoing
 					},
 				)
 			} else {
@@ -737,22 +727,17 @@ func (s *Server) cmdSearch(msg *Message) (res resp.Value, err error) {
 				// globSingle is only for ID matches, not values.
 				sw.col.SearchValuesRange(limits[0], limits[1], sargs.desc, sw,
 					msg.Deadline,
-					func(o *object.Object) bool {
-						keepGoing, err := sw.pushObject(ScanWriterParams{
-							obj: o,
+					func(id string, o geojson.Object, fields []float64) bool {
+						return sw.writeObject(ScanWriterParams{
+							id:     id,
+							o:      o,
+							fields: fields,
+							noLock: true,
 						})
-						if err != nil {
-							ierr = err
-							return false
-						}
-						return keepGoing
 					},
 				)
 			}
 		}
-	}
-	if ierr != nil {
-		return retrerr(ierr)
 	}
 	sw.writeFoot()
 	if msg.OutputType == JSON {

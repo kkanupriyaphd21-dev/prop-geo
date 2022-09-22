@@ -12,8 +12,6 @@ import (
 	"github.com/tidwall/resp"
 	"github.com/tidwall/sjson"
 	"github.com/tidwall/propgeo/internal/collection"
-	"github.com/tidwall/propgeo/internal/field"
-	"github.com/tidwall/propgeo/internal/object"
 )
 
 func appendJSONString(b []byte, s string) []byte {
@@ -193,8 +191,8 @@ func (s *Server) cmdJget(msg *Message) (resp.Value, error) {
 		}
 		return NOMessage, errKeyNotFound
 	}
-	o := col.Get(id)
-	if o == nil {
+	o, _, _, ok := col.Get(id)
+	if !ok {
 		if msg.OutputType == RESP {
 			return resp.NullValue(), nil
 		}
@@ -202,9 +200,9 @@ func (s *Server) cmdJget(msg *Message) (resp.Value, error) {
 	}
 	var res gjson.Result
 	if doget {
-		res = gjson.Get(o.Geo().String(), path)
+		res = gjson.Get(o.String(), path)
 	} else {
-		res = gjson.Parse(o.Geo().String())
+		res = gjson.Parse(o.String())
 	}
 	var val string
 	if raw {
@@ -272,12 +270,10 @@ func (s *Server) cmdJset(msg *Message) (res resp.Value, d commandDetails, err er
 	}
 	var json string
 	var geoobj bool
-	var fields field.List
-	o := col.Get(id)
-	if o != nil {
-		geoobj = objIsSpatial(o.Geo())
-		json = o.Geo().String()
-		fields = o.Fields()
+	o, _, _, ok := col.Get(id)
+	if ok {
+		geoobj = objIsSpatial(o)
+		json = o.String()
 	}
 	if raw {
 		// set as raw block
@@ -294,20 +290,19 @@ func (s *Server) cmdJset(msg *Message) (res resp.Value, d commandDetails, err er
 		nmsg := *msg
 		nmsg.Args = []string{"SET", key, id, "OBJECT", json}
 		// SET key id OBJECT json
-		return s.cmdSET(&nmsg)
+		return s.cmdSet(&nmsg)
 	}
 	if createcol {
 		s.cols.Set(key, col)
 	}
-	var oobj geojson.Object = collection.String(json)
-	obj := object.New(id, oobj, 0, fields)
-	col.Set(obj)
 
 	d.key = key
-	d.obj = obj
+	d.id = id
+	d.obj = collection.String(json)
 	d.timestamp = time.Now()
 	d.updated = true
 
+	col.Set(d.id, d.obj, nil, nil, 0)
 	switch msg.OutputType {
 	case JSON:
 		var buf bytes.Buffer
@@ -340,12 +335,10 @@ func (s *Server) cmdJdel(msg *Message) (res resp.Value, d commandDetails, err er
 
 	var json string
 	var geoobj bool
-	var fields field.List
-	o := col.Get(id)
-	if o != nil {
-		geoobj = objIsSpatial(o.Geo())
-		json = o.Geo().String()
-		fields = o.Fields()
+	o, _, _, ok := col.Get(id)
+	if ok {
+		geoobj = objIsSpatial(o)
+		json = o.String()
 	}
 	njson, err := sjson.Delete(json, path)
 	if err != nil {
@@ -365,17 +358,16 @@ func (s *Server) cmdJdel(msg *Message) (res resp.Value, d commandDetails, err er
 		nmsg := *msg
 		nmsg.Args = []string{"SET", key, id, "OBJECT", json}
 		// SET key id OBJECT json
-		return s.cmdSET(&nmsg)
+		return s.cmdSet(&nmsg)
 	}
 
-	var oobj geojson.Object = collection.String(json)
-	obj := object.New(id, oobj, 0, fields)
-	col.Set(obj)
-
 	d.key = key
-	d.obj = obj
+	d.id = id
+	d.obj = collection.String(json)
 	d.timestamp = time.Now()
 	d.updated = true
+
+	col.Set(d.id, d.obj, nil, nil, 0)
 	switch msg.OutputType {
 	case JSON:
 		var buf bytes.Buffer

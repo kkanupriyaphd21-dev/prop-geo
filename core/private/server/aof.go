@@ -226,8 +226,8 @@ func (s *Server) getQueueCandidates(d *commandDetails) []*Hook {
 		return true
 	})
 	// look for candidates that might "cross" geofences
-	if d.old != nil && d.obj != nil && s.hookCross.Len() > 0 {
-		r1, r2 := d.old.Rect(), d.obj.Rect()
+	if d.oldObj != nil && d.obj != nil && s.hookCross.Len() > 0 {
+		r1, r2 := d.oldObj.Rect(), d.obj.Rect()
 		s.hookCross.Search(
 			[2]float64{
 				math.Min(r1.Min.X, r2.Min.X),
@@ -246,8 +246,8 @@ func (s *Server) getQueueCandidates(d *commandDetails) []*Hook {
 			})
 	}
 	// look for candidates that overlap the old object
-	if d.old != nil {
-		r1 := d.old.Rect()
+	if d.oldObj != nil {
+		r1 := d.oldObj.Rect()
 		s.hookTree.Search(
 			[2]float64{r1.Min.X, r1.Min.Y},
 			[2]float64{r1.Max.X, r1.Max.Y},
@@ -294,6 +294,7 @@ func (s *Server) queueHooks(d *commandDetails) error {
 	for _, hook := range candidates {
 		// Calculate all matching fence messages for all candidates and append
 		// them to the appropriate message slice
+		hook.ScanWriter.loadWheres()
 		msgs := FenceMatch(hook.Name, hook.ScanWriter, hook.Fence, hook.Metas, d)
 		if len(msgs) > 0 {
 			if hook.channel {
