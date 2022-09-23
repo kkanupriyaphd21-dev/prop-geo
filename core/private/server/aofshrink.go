@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/tidwall/btree"
-	"github.com/tidwall/geojson"
 	"github.com/tidwall/propgeo/core"
 	"github.com/tidwall/propgeo/internal/collection"
+	"github.com/tidwall/propgeo/internal/field"
 	"github.com/tidwall/propgeo/internal/log"
+	"github.com/tidwall/propgeo/internal/object"
 )
 
 const maxkeys = 8
@@ -93,15 +94,13 @@ func (s *Server) aofshrink() {
 					if !ok {
 						return
 					}
-					var fnames = col.FieldArr()     // reload an array of field names to match each object
-					var fmap = col.FieldMap()       //
 					var now = time.Now().UnixNano() // used for expiration
 					var count = 0                   // the object count
 					col.ScanGreaterOrEqual(nextid, false, nil, nil,
-						func(id string, obj geojson.Object, fields []float64, ex int64) bool {
+						func(o *object.Object) bool {
 							if count == maxids {
 								// we reached the max number of ids for one batch
-								nextid = id
+								nextid = o.ID()
 								idsdone = false
 								return false
 							}
@@ -109,19 +108,17 @@ func (s *Server) aofshrink() {
 							values = values[:0]
 							values = append(values, "set")
 							values = append(values, keys[0])
-							values = append(values, id)
-							if len(fields) > 0 {
-								fvs := orderFields(fmap, fnames, fields)
-								for _, fv := range fvs {
-									if fv.value != 0 {
-										values = append(values, "field")
-										values = append(values, fv.field)
-										values = append(values, strconv.FormatFloat(fv.value, 'f', -1, 64))
-									}
+							values = append(values, o.ID())
+							o.Fields().Scan(func(f field.Field) bool {
+								if !f.Value().IsZero() {
+									values = append(values, "field")
+									values = append(values, f.Name())
+									values = append(values, f.Value().JSON())
 								}
-							}
-							if ex != 0 {
-								ttl := math.Floor(float64(ex-now)/float64(time.Second)*10) / 10
+								return true
+							})
+							if o.Expires() != 0 {
+								ttl := math.Floor(float64(o.Expires()-now)/float64(time.Second)*10) / 10
 								if ttl < 0.1 {
 									// always leave a little bit of ttl.
 									ttl = 0.1
@@ -129,12 +126,12 @@ func (s *Server) aofshrink() {
 								values = append(values, "ex")
 								values = append(values, strconv.FormatFloat(ttl, 'f', -1, 64))
 							}
-							if objIsSpatial(obj) {
+							if objIsSpatial(o.Geo()) {
 								values = append(values, "object")
-								values = append(values, string(obj.AppendJSON(nil)))
+								values = append(values, string(o.Geo().AppendJSON(nil)))
 							} else {
 								values = append(values, "string")
-								values = append(values, obj.String())
+								values = append(values, o.Geo().String())
 							}
 
 							// append the values to the aof buffer

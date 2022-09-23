@@ -4,9 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"os/exec"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -36,18 +33,27 @@ func subTestKeys(t *testing.T, mc *mockServer) {
 }
 
 func keys_BOUNDS_test(mc *mockServer) error {
-	return mc.DoBatch([][]interface{}{
-		{"SET", "mykey", "myid1", "POINT", 33, -115}, {"OK"},
-		{"BOUNDS", "mykey"}, {"[[-115 33] [-115 33]]"},
-		{"SET", "mykey", "myid2", "POINT", 34, -112}, {"OK"},
-		{"BOUNDS", "mykey"}, {"[[-115 33] [-112 34]]"},
-		{"DEL", "mykey", "myid2"}, {1},
-		{"BOUNDS", "mykey"}, {"[[-115 33] [-115 33]]"},
-		{"SET", "mykey", "myid3", "OBJECT", `{"type":"Point","coordinates":[-130,38,10]}`}, {"OK"},
-		{"SET", "mykey", "myid4", "OBJECT", `{"type":"Point","coordinates":[-110,25,-8]}`}, {"OK"},
-		{"BOUNDS", "mykey"}, {"[[-130 25] [-110 38]]"},
-	})
+	return mc.DoBatch(
+		Do("BOUNDS", "mykey").String("<nil>"),
+		Do("BOUNDS", "mykey").JSON().Error("key not found"),
+		Do("SET", "mykey", "myid1", "POINT", 33, -115).OK(),
+		Do("BOUNDS", "mykey").String("[[-115 33] [-115 33]]"),
+		Do("BOUNDS", "mykey").JSON().String(`{"ok":true,"bounds":{"type":"Point","coordinates":[-115,33]}}`),
+		Do("SET", "mykey", "myid2", "POINT", 34, -112).OK(),
+		Do("BOUNDS", "mykey").String("[[-115 33] [-112 34]]"),
+		Do("DEL", "mykey", "myid2").String("1"),
+		Do("BOUNDS", "mykey").String("[[-115 33] [-115 33]]"),
+		Do("SET", "mykey", "myid3", "OBJECT", `{"type":"Point","coordinates":[-130,38,10]}`).OK(),
+		Do("SET", "mykey", "myid4", "OBJECT", `{"type":"Point","coordinates":[-110,25,-8]}`).OK(),
+		Do("BOUNDS", "mykey").String("[[-130 25] [-110 38]]"),
+		Do("BOUNDS", "mykey", "hello").Error("wrong number of arguments for 'bounds' command"),
+		Do("BOUNDS", "nada").String("<nil>"),
+		Do("BOUNDS", "nada").JSON().Error("key not found"),
+		Do("BOUNDS", "").String("<nil>"),
+		Do("BOUNDS", "mykey").JSON().String(`{"ok":true,"bounds":{"type":"Polygon","coordinates":[[[-130,25],[-110,25],[-110,38],[-130,38],[-130,25]]]}}`),
+	)
 }
+
 func keys_DEL_test(mc *mockServer) error {
 	return mc.DoBatch([][]interface{}{
 		{"SET", "mykey", "myid", "POINT", 33, -115}, {"OK"},
@@ -256,62 +262,6 @@ func keys_TTL_test(mc *mockServer) error {
 	})
 }
 
-type PSAUX struct {
-	User    string
-	PID     int
-	CPU     float64
-	Mem     float64
-	VSZ     int
-	RSS     int
-	TTY     string
-	Stat    string
-	Start   string
-	Time    string
-	Command string
-}
-
-func atoi(s string) int {
-	n, _ := strconv.ParseInt(s, 10, 64)
-	return int(n)
-}
-func atof(s string) float64 {
-	n, _ := strconv.ParseFloat(s, 64)
-	return float64(n)
-}
-func psaux(pid int) PSAUX {
-	var res []byte
-	res, err := exec.Command("ps", "aux").CombinedOutput()
-	if err != nil {
-		return PSAUX{}
-	}
-	pids := strconv.FormatInt(int64(pid), 10)
-	for _, line := range strings.Split(string(res), "\n") {
-		var words []string
-		for _, word := range strings.Split(line, " ") {
-			if word != "" {
-				words = append(words, word)
-			}
-			if len(words) > 11 {
-				if words[1] == pids {
-					return PSAUX{
-						User:    words[0],
-						PID:     atoi(words[1]),
-						CPU:     atof(words[2]),
-						Mem:     atof(words[3]),
-						VSZ:     atoi(words[4]),
-						RSS:     atoi(words[5]),
-						TTY:     words[6],
-						Stat:    words[7],
-						Start:   words[8],
-						Time:    words[9],
-						Command: words[10],
-					}
-				}
-			}
-		}
-	}
-	return PSAUX{}
-}
 func keys_SET_EX_test(mc *mockServer) (err error) {
 	rand.Seed(time.Now().UnixNano())
 
@@ -352,8 +302,8 @@ func keys_FIELDS_test(mc *mockServer) error {
 	return mc.DoBatch([][]interface{}{
 		{"SET", "mykey", "myid1a", "FIELD", "a", 1, "POINT", 33, -115}, {"OK"},
 		{"GET", "mykey", "myid1a", "WITHFIELDS"}, {`[{"type":"Point","coordinates":[-115,33]} [a 1]]`},
-		{"SET", "mykey", "myid1a", "FIELD", "a", "a", "POINT", 33, -115}, {"ERR invalid argument 'a'"},
-		{"GET", "mykey", "myid1a", "WITHFIELDS"}, {`[{"type":"Point","coordinates":[-115,33]} [a 1]]`},
+		{"SET", "mykey", "myid1a", "FIELD", "a", "a", "POINT", 33, -115}, {"OK"},
+		{"GET", "mykey", "myid1a", "WITHFIELDS"}, {`[{"type":"Point","coordinates":[-115,33]} [a a]]`},
 		{"SET", "mykey", "myid1a", "FIELD", "a", 1, "FIELD", "b", 2, "POINT", 33, -115}, {"OK"},
 		{"GET", "mykey", "myid1a", "WITHFIELDS"}, {`[{"type":"Point","coordinates":[-115,33]} [a 1 b 2]]`},
 		{"SET", "mykey", "myid1a", "FIELD", "b", 2, "POINT", 33, -115}, {"OK"},
@@ -390,7 +340,8 @@ func keys_WHEREIN_test(mc *mockServer) error {
 		{"WITHIN", "mykey", "WHEREIN", "a", 3, 0, 1, 2, "BOUNDS", 32.8, -115.2, 33.2, -114.8}, {`[0 [[myid_a1 {"type":"Point","coordinates":[-115,33]} [a 1]]]]`},
 		{"WITHIN", "mykey", "WHEREIN", "a", "a", 0, 1, 2, "BOUNDS", 32.8, -115.2, 33.2, -114.8}, {"ERR invalid argument 'a'"},
 		{"WITHIN", "mykey", "WHEREIN", "a", 1, 0, 1, 2, "BOUNDS", 32.8, -115.2, 33.2, -114.8}, {"ERR invalid argument '1'"},
-		{"WITHIN", "mykey", "WHEREIN", "a", 3, 0, "a", 2, "BOUNDS", 32.8, -115.2, 33.2, -114.8}, {"ERR invalid argument 'a'"},
+		{"WITHIN", "mykey", "WHEREIN", "a", 3, 0, "a", 2, "BOUNDS", 32.8, -115.2, 33.2, -114.8}, {"[0 []]"},
+		{"WITHIN", "mykey", "WHEREIN", "a", 4, 0, "a", 1, 2, "BOUNDS", 32.8, -115.2, 33.2, -114.8}, {`[0 [[myid_a1 {"type":"Point","coordinates":[-115,33]} [a 1]]]]`},
 		{"SET", "mykey", "myid_a2", "FIELD", "a", 2, "POINT", 32.99, -115}, {"OK"},
 		{"SET", "mykey", "myid_a3", "FIELD", "a", 3, "POINT", 33, -115.02}, {"OK"},
 		{"WITHIN", "mykey", "WHEREIN", "a", 3, 0, 1, 2, "BOUNDS", 32.8, -115.2, 33.2, -114.8}, {
