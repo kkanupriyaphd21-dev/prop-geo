@@ -596,17 +596,17 @@ func (s *Server) commandInScript(msg *Message) (
 	case "fset":
 		res, d, err = s.cmdFSET(msg)
 	case "del":
-		res, d, err = s.cmdDel(msg)
+		res, d, err = s.cmdDEL(msg)
 	case "pdel":
-		res, d, err = s.cmdPdel(msg)
+		res, d, err = s.cmdPDEL(msg)
 	case "drop":
-		res, d, err = s.cmdDrop(msg)
+		res, d, err = s.cmdDROP(msg)
 	case "expire":
 		res, d, err = s.cmdEXPIRE(msg)
 	case "rename":
-		res, d, err = s.cmdRename(msg)
+		res, d, err = s.cmdRENAME(msg)
 	case "renamenx":
-		res, d, err = s.cmdRename(msg)
+		res, d, err = s.cmdRENAME(msg)
 	case "persist":
 		res, d, err = s.cmdPERSIST(msg)
 	case "ttl":
@@ -626,7 +626,7 @@ func (s *Server) commandInScript(msg *Message) (
 	case "bounds":
 		res, err = s.cmdBOUNDS(msg)
 	case "get":
-		res, err = s.cmdGet(msg)
+		res, err = s.cmdGET(msg)
 	case "jget":
 		res, err = s.cmdJget(msg)
 	case "jset":
@@ -634,7 +634,7 @@ func (s *Server) commandInScript(msg *Message) (
 	case "jdel":
 		res, d, err = s.cmdJdel(msg)
 	case "type":
-		res, err = s.cmdType(msg)
+		res, err = s.cmdTYPE(msg)
 	case "keys":
 		res, err = s.cmdKeys(msg)
 	case "test":

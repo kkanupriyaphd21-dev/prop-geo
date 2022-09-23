@@ -10,14 +10,17 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/tidwall/gjson"
 )
 
 type IO struct {
-	args []any
-	json bool
-	out  any
+	args  []any
+	json  bool
+	out   any
+	sleep bool
+	dur   time.Duration
 }
 
 func Do(args ...any) *IO {
@@ -27,7 +30,7 @@ func (cmd *IO) JSON() *IO {
 	cmd.json = true
 	return cmd
 }
-func (cmd *IO) String(s string) *IO {
+func (cmd *IO) Str(s string) *IO {
 	cmd.out = s
 	return cmd
 }
@@ -56,7 +59,7 @@ func (cmd *IO) OK() *IO {
 	})
 }
 
-func (cmd *IO) Error(msg string) *IO {
+func (cmd *IO) Err(msg string) *IO {
 	return cmd.Custom(func(s string) error {
 		if cmd.json {
 			if gjson.Get(s, "ok").Type != gjson.False {
@@ -74,6 +77,10 @@ func (cmd *IO) Error(msg string) *IO {
 		}
 		return nil
 	})
+}
+
+func Sleep(duration time.Duration) *IO {
+	return &IO{sleep: true, dur: duration}
 }
 
 type ioVisitor struct {
@@ -222,6 +229,10 @@ func (cmd *IO) deepError(index int, err error) error {
 }
 
 func (mc *mockServer) doIOTest(index int, cmd *IO) error {
+	if cmd.sleep {
+		time.Sleep(cmd.dur)
+		return nil
+	}
 	// switch json mode if desired
 	if cmd.json {
 		if !mc.ioJSON {
