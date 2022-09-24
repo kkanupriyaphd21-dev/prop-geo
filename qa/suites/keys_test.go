@@ -32,6 +32,8 @@ func subTestKeys(t *testing.T, mc *mockServer) {
 	runStep(t, mc, "WHEREEVAL", keys_WHEREEVAL_test)
 	runStep(t, mc, "TYPE", keys_TYPE_test)
 	runStep(t, mc, "FLUSHDB", keys_FLUSHDB_test)
+	runStep(t, mc, "HEALTHZ", keys_HEALTHZ_test)
+
 }
 
 func keys_BOUNDS_test(mc *mockServer) error {
@@ -160,24 +162,34 @@ func keys_EXPIRE_test(mc *mockServer) error {
 	)
 }
 func keys_FSET_test(mc *mockServer) error {
-	return mc.DoBatch([][]interface{}{
-		{"SET", "mykey", "myid", "HASH", "9my5xp7"}, {"OK"},
-		{"GET", "mykey", "myid", "WITHFIELDS", "HASH", 7}, {"[9my5xp7]"},
-		{"FSET", "mykey", "myid", "f1", 105.6}, {1},
-		{"GET", "mykey", "myid", "WITHFIELDS", "HASH", 7}, {"[9my5xp7 [f1 105.6]]"},
-		{"FSET", "mykey", "myid", "f1", 1.1, "f2", 2.2}, {2},
-		{"GET", "mykey", "myid", "WITHFIELDS", "HASH", 7}, {"[9my5xp7 [f1 1.1 f2 2.2]]"},
-		{"FSET", "mykey", "myid", "f1", 1.1, "f2", 22.22}, {1},
-		{"GET", "mykey", "myid", "WITHFIELDS", "HASH", 7}, {"[9my5xp7 [f1 1.1 f2 22.22]]"},
-		{"FSET", "mykey", "myid", "f1", 0}, {1},
-		{"GET", "mykey", "myid", "WITHFIELDS", "HASH", 7}, {"[9my5xp7 [f2 22.22]]"},
-		{"FSET", "mykey", "myid", "f2", 0}, {1},
-		{"GET", "mykey", "myid", "WITHFIELDS", "HASH", 7}, {"[9my5xp7]"},
-		{"FSET", "mykey", "myid2", "xx", "f1", 1.1, "f2", 2.2}, {0},
-		{"GET", "mykey", "myid2"}, {nil},
-		{"DEL", "mykey", "myid"}, {"1"},
-		{"GET", "mykey", "myid"}, {nil},
-	})
+	return mc.DoBatch(
+		Do("SET", "mykey", "myid", "HASH", "9my5xp7").OK(),
+		Do("GET", "mykey", "myid", "WITHFIELDS", "HASH", 7).Str("[9my5xp7]"),
+		Do("FSET", "mykey", "myid", "f1", 105.6).Str("1"),
+		Do("GET", "mykey", "myid", "WITHFIELDS", "HASH", 7).Str("[9my5xp7 [f1 105.6]]"),
+		Do("FSET", "mykey", "myid", "f1", 1.1, "f2", 2.2).Str("2"),
+		Do("GET", "mykey", "myid", "WITHFIELDS", "HASH", 7).Str("[9my5xp7 [f1 1.1 f2 2.2]]"),
+		Do("FSET", "mykey", "myid", "f1", 1.1, "f2", 22.22).Str("1"),
+		Do("GET", "mykey", "myid", "WITHFIELDS", "HASH", 7).Str("[9my5xp7 [f1 1.1 f2 22.22]]"),
+		Do("FSET", "mykey", "myid", "f1", 0).Str("1"),
+		Do("GET", "mykey", "myid", "WITHFIELDS", "HASH", 7).Str("[9my5xp7 [f2 22.22]]"),
+		Do("FSET", "mykey", "myid", "f2", 0).Str("1"),
+		Do("GET", "mykey", "myid", "WITHFIELDS", "HASH", 7).Str("[9my5xp7]"),
+		Do("FSET", "mykey", "myid2", "xx", "f1", 1.1, "f2", 2.2).Str("0"),
+		Do("GET", "mykey", "myid2").Str("<nil>"),
+		Do("DEL", "mykey", "myid").Str("1"),
+		Do("GET", "mykey", "myid").Str("<nil>"),
+		Do("SET", "mykey", "myid", "HASH", "9my5xp7").OK(),
+		Do("CONFIG", "SET", "maxmemory", "1").OK(),
+		Do("FSET", "mykey", "myid", "xx", "f1", 1.1, "f2", 2.2).Err(`OOM command not allowed when used memory > 'maxmemory'`),
+		Do("CONFIG", "SET", "maxmemory", "0").OK(),
+		Do("FSET", "mykey", "myid", "xx").Err("wrong number of arguments for 'fset' command"),
+		Do("FSET", "mykey", "myid", "f1", "a", "f2").Err("wrong number of arguments for 'fset' command"),
+		Do("FSET", "mykey", "myid", "z", "a").Err("invalid argument 'z'"),
+		Do("FSET", "mykey2", "myid", "a", "b").Err("key not found"),
+		Do("FSET", "mykey", "myid2", "a", "b").Err("id not found"),
+		Do("FSET", "mykey", "myid", "f2", 0).JSON().OK(),
+	)
 }
 func keys_GET_test(mc *mockServer) error {
 	return mc.DoBatch(
@@ -215,118 +227,177 @@ func keys_GET_test(mc *mockServer) error {
 	)
 }
 func keys_KEYS_test(mc *mockServer) error {
-	return mc.DoBatch([][]interface{}{
-		{"SET", "mykey11", "myid4", "STRING", "value"}, {"OK"},
-		{"SET", "mykey22", "myid2", "HASH", "9my5xp7"}, {"OK"},
-		{"SET", "mykey22", "myid1", "OBJECT", `{"type":"Point","coordinates":[-130,38,10]}`}, {"OK"},
-		{"SET", "mykey11", "myid3", "OBJECT", `{"type":"Point","coordinates":[-110,25,-8]}`}, {"OK"},
-		{"SET", "mykey42", "myid2", "HASH", "9my5xp7"}, {"OK"},
-		{"SET", "mykey31", "myid4", "STRING", "value"}, {"OK"},
-		{"SET", "mykey310", "myid5", "STRING", "value"}, {"OK"},
-		{"KEYS", "*"}, {"[mykey11 mykey22 mykey31 mykey310 mykey42]"},
-		{"KEYS", "*key*"}, {"[mykey11 mykey22 mykey31 mykey310 mykey42]"},
-		{"KEYS", "mykey*"}, {"[mykey11 mykey22 mykey31 mykey310 mykey42]"},
-		{"KEYS", "mykey4*"}, {"[mykey42]"},
-		{"KEYS", "mykey*1"}, {"[mykey11 mykey31]"},
-		{"KEYS", "mykey*1*"}, {"[mykey11 mykey31 mykey310]"},
-		{"KEYS", "mykey*10"}, {"[mykey310]"},
-		{"KEYS", "mykey*2"}, {"[mykey22 mykey42]"},
-		{"KEYS", "*2"}, {"[mykey22 mykey42]"},
-		{"KEYS", "*1*"}, {"[mykey11 mykey31 mykey310]"},
-		{"KEYS", "mykey"}, {"[]"},
-		{"KEYS", "mykey31"}, {"[mykey31]"},
-		{"KEYS", "mykey[^3]*"}, {"[mykey11 mykey22 mykey42]"},
-	})
+	return mc.DoBatch(
+		Do("SET", "mykey11", "myid4", "STRING", "value").OK(),
+		Do("SET", "mykey22", "myid2", "HASH", "9my5xp7").OK(),
+		Do("SET", "mykey22", "myid1", "OBJECT", `{"type":"Point","coordinates":[-130,38,10]}`).OK(),
+		Do("SET", "mykey11", "myid3", "OBJECT", `{"type":"Point","coordinates":[-110,25,-8]}`).OK(),
+		Do("SET", "mykey42", "myid2", "HASH", "9my5xp7").OK(),
+		Do("SET", "mykey31", "myid4", "STRING", "value").OK(),
+		Do("SET", "mykey310", "myid5", "STRING", "value").OK(),
+		Do("KEYS", "*").Str("[mykey11 mykey22 mykey31 mykey310 mykey42]"),
+		Do("KEYS", "*key*").Str("[mykey11 mykey22 mykey31 mykey310 mykey42]"),
+		Do("KEYS", "mykey*").Str("[mykey11 mykey22 mykey31 mykey310 mykey42]"),
+		Do("KEYS", "mykey4*").Str("[mykey42]"),
+		Do("KEYS", "mykey*1").Str("[mykey11 mykey31]"),
+		Do("KEYS", "mykey*1*").Str("[mykey11 mykey31 mykey310]"),
+		Do("KEYS", "mykey*10").Str("[mykey310]"),
+		Do("KEYS", "mykey*2").Str("[mykey22 mykey42]"),
+		Do("KEYS", "*2").Str("[mykey22 mykey42]"),
+		Do("KEYS", "*1*").Str("[mykey11 mykey31 mykey310]"),
+		Do("KEYS", "mykey").Str("[]"),
+		Do("KEYS", "mykey31").Str("[mykey31]"),
+		Do("KEYS", "mykey[^3]*").Str("[mykey11 mykey22 mykey42]"),
+		Do("KEYS").Err("wrong number of arguments for 'keys' command"),
+		Do("KEYS", "*").JSON().Str(`{"ok":true,"keys":["mykey11","mykey22","mykey31","mykey310","mykey42"]}`),
+	)
 }
 func keys_PERSIST_test(mc *mockServer) error {
-	return mc.DoBatch([][]interface{}{
-		{"SET", "mykey", "myid", "STRING", "value"}, {"OK"},
-		{"EXPIRE", "mykey", "myid", 2}, {1},
-		{"PERSIST", "mykey", "myid"}, {1},
-		{"PERSIST", "mykey", "myid"}, {0},
-	})
+	return mc.DoBatch(
+		Do("SET", "mykey", "myid", "STRING", "value").OK(),
+		Do("EXPIRE", "mykey", "myid", 2).Str("1"),
+		Do("PERSIST", "mykey", "myid").Str("1"),
+		Do("PERSIST", "mykey", "myid").Str("0"),
+		Do("PERSIST", "mykey").Err("wrong number of arguments for 'persist' command"),
+		Do("PERSIST", "mykey2", "myid").Str("0"),
+		Do("PERSIST", "mykey2", "myid").JSON().Err("key not found"),
+		Do("PERSIST", "mykey", "myid2").Str("0"),
+		Do("PERSIST", "mykey", "myid2").JSON().Err("id not found"),
+		Do("EXPIRE", "mykey", "myid", 2).Str("1"),
+		Do("PERSIST", "mykey", "myid").JSON().OK(),
+	)
 }
 func keys_SET_test(mc *mockServer) error {
 	return mc.DoBatch(
-		"point", [][]interface{}{
-			{"SET", "mykey", "myid", "POINT", 33, -115}, {"OK"},
-			{"GET", "mykey", "myid", "POINT"}, {"[33 -115]"},
-			{"GET", "mykey", "myid", "BOUNDS"}, {"[[33 -115] [33 -115]]"},
-			{"GET", "mykey", "myid", "OBJECT"}, {`{"type":"Point","coordinates":[-115,33]}`},
-			{"GET", "mykey", "myid", "HASH", 7}, {"9my5xp7"},
-			{"DEL", "mykey", "myid"}, {"1"},
-			{"GET", "mykey", "myid"}, {nil},
-		},
-		"object", [][]interface{}{
-			{"SET", "mykey", "myid", "OBJECT", `{"type":"Point","coordinates":[-115,33]}`}, {"OK"},
-			{"GET", "mykey", "myid", "POINT"}, {"[33 -115]"},
-			{"GET", "mykey", "myid", "BOUNDS"}, {"[[33 -115] [33 -115]]"},
-			{"GET", "mykey", "myid", "OBJECT"}, {`{"type":"Point","coordinates":[-115,33]}`},
-			{"GET", "mykey", "myid", "HASH", 7}, {"9my5xp7"},
-			{"DEL", "mykey", "myid"}, {"1"},
-			{"GET", "mykey", "myid"}, {nil},
-		},
-		"bounds", [][]interface{}{
-			{"SET", "mykey", "myid", "BOUNDS", 33, -115, 33, -115}, {"OK"},
-			{"GET", "mykey", "myid", "POINT"}, {"[33 -115]"},
-			{"GET", "mykey", "myid", "BOUNDS"}, {"[[33 -115] [33 -115]]"},
-			{"GET", "mykey", "myid", "OBJECT"}, {`{"type":"Point","coordinates":[-115,33]}`},
-			{"GET", "mykey", "myid", "HASH", 7}, {"9my5xp7"},
-			{"DEL", "mykey", "myid"}, {"1"},
-			{"GET", "mykey", "myid"}, {nil},
-		},
-		"hash", [][]interface{}{
-			{"SET", "mykey", "myid", "HASH", "9my5xp7"}, {"OK"},
-			{"GET", "mykey", "myid", "HASH", 7}, {"9my5xp7"},
-			{"DEL", "mykey", "myid"}, {"1"},
-			{"GET", "mykey", "myid"}, {nil},
-		},
-		"field", [][]interface{}{
-			{"SET", "mykey", "myid", "FIELD", "f1", 33, "FIELD", "a2", 44.5, "HASH", "9my5xp7"}, {"OK"},
-			{"GET", "mykey", "myid", "WITHFIELDS", "HASH", 7}, {"[9my5xp7 [a2 44.5 f1 33]]"},
-			{"FSET", "mykey", "myid", "f1", 0}, {1},
-			{"FSET", "mykey", "myid", "f1", 0}, {0},
-			{"GET", "mykey", "myid", "WITHFIELDS", "HASH", 7}, {"[9my5xp7 [a2 44.5]]"},
-			{"DEL", "mykey", "myid"}, {"1"},
-			{"GET", "mykey", "myid"}, {nil},
-		},
-		"string", [][]interface{}{
-			{"SET", "mykey", "myid", "STRING", "value"}, {"OK"},
-			{"GET", "mykey", "myid"}, {"value"},
-			{"SET", "mykey", "myid", "STRING", "value2"}, {"OK"},
-			{"GET", "mykey", "myid"}, {"value2"},
-			{"DEL", "mykey", "myid"}, {"1"},
-			{"GET", "mykey", "myid"}, {nil},
-		},
+		// Section: point
+		Do("SET", "mykey", "myid", "POINT", 33, -115).OK(),
+		Do("GET", "mykey", "myid", "POINT").Str("[33 -115]"),
+		Do("GET", "mykey", "myid", "BOUNDS").Str("[[33 -115] [33 -115]]"),
+		Do("GET", "mykey", "myid", "OBJECT").Str(`{"type":"Point","coordinates":[-115,33]}`),
+		Do("GET", "mykey", "myid", "HASH", 7).Str("9my5xp7"),
+		Do("DEL", "mykey", "myid").Str("1"),
+		Do("GET", "mykey", "myid").Str("<nil>"),
+		Do("SET", "mykey", "myid", "point", "33", "-112", "99").OK(),
+
+		// Section: object
+		Do("SET", "mykey", "myid", "OBJECT", `{"type":"Point","coordinates":[-115,33]}`).OK(),
+		Do("GET", "mykey", "myid", "POINT").Str("[33 -115]"),
+		Do("GET", "mykey", "myid", "BOUNDS").Str("[[33 -115] [33 -115]]"),
+		Do("GET", "mykey", "myid", "OBJECT").Str(`{"type":"Point","coordinates":[-115,33]}`),
+		Do("GET", "mykey", "myid", "HASH", 7).Str("9my5xp7"),
+		Do("DEL", "mykey", "myid").Str("1"),
+		Do("GET", "mykey", "myid").Str("<nil>"),
+
+		// Section: bounds
+		Do("SET", "mykey", "myid", "BOUNDS", 33, -115, 33, -115).OK(),
+		Do("GET", "mykey", "myid", "POINT").Str("[33 -115]"),
+		Do("GET", "mykey", "myid", "BOUNDS").Str("[[33 -115] [33 -115]]"),
+		Do("GET", "mykey", "myid", "OBJECT").Str(`{"type":"Point","coordinates":[-115,33]}`),
+		Do("GET", "mykey", "myid", "HASH", 7).Str("9my5xp7"),
+		Do("DEL", "mykey", "myid").Str("1"),
+		Do("GET", "mykey", "myid").Str("<nil>"),
+
+		// Section: hash
+		Do("SET", "mykey", "myid", "HASH", "9my5xp7").OK(),
+		Do("GET", "mykey", "myid", "HASH", 7).Str("9my5xp7"),
+		Do("DEL", "mykey", "myid").Str("1"),
+		Do("GET", "mykey", "myid").Str("<nil>"),
+		Do("SET", "mykey", "myid", "HASH", "9my5xp7").JSON().OK(),
+
+		// Section: field
+		Do("SET", "mykey", "myid", "FIELD", "f1", 33, "FIELD", "a2", 44.5, "HASH", "9my5xp7").OK(),
+		Do("GET", "mykey", "myid", "WITHFIELDS", "HASH", 7).Str("[9my5xp7 [a2 44.5 f1 33]]"),
+		Do("FSET", "mykey", "myid", "f1", 0).Str("1"),
+		Do("FSET", "mykey", "myid", "f1", 0).Str("0"),
+		Do("GET", "mykey", "myid", "WITHFIELDS", "HASH", 7).Str("[9my5xp7 [a2 44.5]]"),
+		Do("DEL", "mykey", "myid").Str("1"),
+		Do("GET", "mykey", "myid").Str("<nil>"),
+
+		// Section: string
+		Do("SET", "mykey", "myid", "STRING", "value").OK(),
+		Do("GET", "mykey", "myid").Str("value"),
+		Do("SET", "mykey", "myid", "STRING", "value2").OK(),
+		Do("GET", "mykey", "myid").Str("value2"),
+		Do("DEL", "mykey", "myid").Str("1"),
+		Do("GET", "mykey", "myid").Str("<nil>"),
+
+		// Test error conditions
+		Do("CONFIG", "SET", "maxmemory", "1").OK(),
+		Do("SET", "mykey", "myid", "STRING", "value2").Err("OOM command not allowed when used memory > 'maxmemory'"),
+		Do("CONFIG", "SET", "maxmemory", "0").OK(),
+		Do("SET").Err("wrong number of arguments for 'set' command"),
+		Do("SET", "mykey", "myid", "FIELD", "f1").Err("wrong number of arguments for 'set' command"),
+		Do("SET", "mykey", "myid", "FIELD", "z", "1").Err("invalid argument 'z'"),
+		Do("SET", "mykey", "myid", "EX").Err("wrong number of arguments for 'set' command"),
+		Do("SET", "mykey", "myid", "EX", "yyy").Err("invalid argument 'yyy'"),
+		Do("SET", "mykey", "myid", "EX", "123").Err("wrong number of arguments for 'set' command"),
+		Do("SET", "mykey", "myid", "nx").Err("wrong number of arguments for 'set' command"),
+		Do("SET", "mykey", "myid", "nx", "xx").Err("invalid argument 'xx'"),
+		Do("SET", "mykey", "myid", "xx", "nx").Err("invalid argument 'nx'"),
+		Do("SET", "mykey", "myid", "string").Err("wrong number of arguments for 'set' command"),
+		Do("SET", "mykey", "myid", "point").Err("wrong number of arguments for 'set' command"),
+		Do("SET", "mykey", "myid", "point", "33").Err("wrong number of arguments for 'set' command"),
+		Do("SET", "mykey", "myid", "point", "33f", "-112").Err("invalid argument '33f'"),
+		Do("SET", "mykey", "myid", "point", "33", "-112f").Err("invalid argument '-112f'"),
+		Do("SET", "mykey", "myid", "point", "33", "-112f", "99").Err("invalid argument '-112f'"),
+		Do("SET", "mykey", "myid", "bounds").Err("wrong number of arguments for 'set' command"),
+		Do("SET", "mykey", "myid", "bounds", "fff", "1", "2", "3").Err("invalid argument 'fff'"),
+		Do("SET", "mykey", "myid", "hash").Err("wrong number of arguments for 'set' command"),
+		Do("SET", "mykey", "myid", "object").Err("wrong number of arguments for 'set' command"),
+		Do("SET", "mykey", "myid", "object", "asd").Err("invalid data"),
+		Do("SET", "mykey", "myid", "joint").Err("invalid argument 'joint'"),
+		Do("SET", "mykey", "myid", "XX", "HASH", "9my5xp7").Err("<nil>"),
+		Do("SET", "mykey", "myid", "XX", "HASH", "9my5xp7").JSON().Err("id not found"),
+		Do("SET", "mykey", "myid1", "HASH", "9my5xp7").OK(),
+		Do("SET", "mykey", "myid", "XX", "HASH", "9my5xp7").Err("<nil>"),
+		Do("SET", "mykey", "myid", "NX", "HASH", "9my5xp7").OK(),
+		Do("SET", "mykey", "myid", "XX", "HASH", "9my5xp7").OK(),
+		Do("SET", "mykey", "myid", "NX", "HASH", "9my5xp7").Err("<nil>"),
+		Do("SET", "mykey", "myid", "NX", "HASH", "9my5xp7").JSON().Err("id already exists"),
 	)
 }
 
 func keys_STATS_test(mc *mockServer) error {
-	return mc.DoBatch([][]interface{}{
-		{"STATS", "mykey"}, {"[nil]"},
-		{"SET", "mykey", "myid", "STRING", "value"}, {"OK"},
-		{"STATS", "mykey"}, {"[[in_memory_size 9 num_objects 1 num_points 0 num_strings 1]]"},
-		{"SET", "mykey", "myid2", "STRING", "value"}, {"OK"},
-		{"STATS", "mykey"}, {"[[in_memory_size 19 num_objects 2 num_points 0 num_strings 2]]"},
-		{"SET", "mykey", "myid3", "OBJECT", `{"type":"Point","coordinates":[-115,33]}`}, {"OK"},
-		{"STATS", "mykey"}, {"[[in_memory_size 40 num_objects 3 num_points 1 num_strings 2]]"},
-		{"DEL", "mykey", "myid"}, {1},
-		{"STATS", "mykey"}, {"[[in_memory_size 31 num_objects 2 num_points 1 num_strings 1]]"},
-		{"DEL", "mykey", "myid3"}, {1},
-		{"STATS", "mykey"}, {"[[in_memory_size 10 num_objects 1 num_points 0 num_strings 1]]"},
-		{"STATS", "mykey", "mykey2"}, {"[[in_memory_size 10 num_objects 1 num_points 0 num_strings 1] nil]"},
-		{"DEL", "mykey", "myid2"}, {1},
-		{"STATS", "mykey"}, {"[nil]"},
-		{"STATS", "mykey", "mykey2"}, {"[nil nil]"},
-	})
+	return mc.DoBatch(
+		Do("STATS", "mykey").Str("[nil]"),
+		Do("SET", "mykey", "myid", "STRING", "value").OK(),
+		Do("STATS", "mykey").Str("[[in_memory_size 9 num_objects 1 num_points 0 num_strings 1]]"),
+		Do("STATS", "mykey", "hello").JSON().Str(`{"ok":true,"stats":[{"in_memory_size":9,"num_objects":1,"num_points":0,"num_strings":1},null]}`),
+		Do("SET", "mykey", "myid2", "STRING", "value").OK(),
+		Do("STATS", "mykey").Str("[[in_memory_size 19 num_objects 2 num_points 0 num_strings 2]]"),
+		Do("SET", "mykey", "myid3", "OBJECT", `{"type":"Point","coordinates":[-115,33]}`).OK(),
+		Do("STATS", "mykey").Str("[[in_memory_size 40 num_objects 3 num_points 1 num_strings 2]]"),
+		Do("DEL", "mykey", "myid").Str("1"),
+		Do("STATS", "mykey").Str("[[in_memory_size 31 num_objects 2 num_points 1 num_strings 1]]"),
+		Do("DEL", "mykey", "myid3").Str("1"),
+		Do("STATS", "mykey").Str("[[in_memory_size 10 num_objects 1 num_points 0 num_strings 1]]"),
+		Do("STATS", "mykey", "mykey2").Str("[[in_memory_size 10 num_objects 1 num_points 0 num_strings 1] nil]"),
+		Do("DEL", "mykey", "myid2").Str("1"),
+		Do("STATS", "mykey").Str("[nil]"),
+		Do("STATS", "mykey", "mykey2").Str("[nil nil]"),
+		Do("STATS", "mykey").Str("[nil]"),
+		Do("STATS").Err(`wrong number of arguments for 'stats' command`),
+	)
 }
 func keys_TTL_test(mc *mockServer) error {
-	return mc.DoBatch([][]interface{}{
-		{"SET", "mykey", "myid", "STRING", "value"}, {"OK"},
-		{"EXPIRE", "mykey", "myid", 2}, {1},
-		{time.Second / 4}, {}, // sleep
-		{"TTL", "mykey", "myid"}, {1},
-	})
+	return mc.DoBatch(
+		Do("SET", "mykey", "myid", "STRING", "value").OK(),
+		Do("EXPIRE", "mykey", "myid", 2).Str("1"),
+		Do("EXPIRE", "mykey", "myid", 2).JSON().OK(),
+		Sleep(time.Millisecond*10),
+		Do("TTL", "mykey", "myid").Str("1"),
+		Do("EXPIRE", "mykey", "myid", 1).Str("1"),
+		Sleep(time.Millisecond*10),
+		Do("TTL", "mykey", "myid").Str("0"),
+		Do("TTL", "mykey", "myid").JSON().Str(`{"ok":true,"ttl":0}`),
+		Do("TTL", "mykey2", "myid").Str("-2"),
+		Do("TTL", "mykey", "myid2").Str("-2"),
+		Do("TTL", "mykey").Err("wrong number of arguments for 'ttl' command"),
+		Do("SET", "mykey", "myid", "STRING", "value").OK(),
+		Do("TTL", "mykey", "myid").Str("-1"),
+		Do("TTL", "mykey2", "myid").JSON().Err("key not found"),
+		Do("TTL", "mykey", "myid2").JSON().Err("id not found"),
+	)
 }
 
 func keys_SET_EX_test(mc *mockServer) (err error) {
@@ -455,7 +526,7 @@ func keys_FLUSHDB_test(mc *mockServer) error {
 		Do("SET", "mykey2", "myid1", "POINT", 33, -115).OK(),
 		Do("SETCHAN", "mychan", "INTERSECTS", "mykey1", "BOUNDS", 10, 10, 10, 10).Str("1"),
 		Do("KEYS", "*").Str("[mykey1 mykey2]"),
-		Do("CHANS", "*").JSON().Custom(func(s string) error {
+		Do("CHANS", "*").JSON().Func(func(s string) error {
 			if gjson.Get(s, "chans.#").Int() != 1 {
 				return fmt.Errorf("expected '%d', got '%d'", 1, gjson.Get(s, "chans.#").Int())
 			}
@@ -469,5 +540,36 @@ func keys_FLUSHDB_test(mc *mockServer) error {
 		Do("SET", "mykey2", "myid1", "POINT", 33, -115).OK(),
 		Do("SETCHAN", "mychan", "INTERSECTS", "mykey1", "BOUNDS", 10, 10, 10, 10).Str("1"),
 		Do("FLUSHDB").JSON().OK(),
+	)
+}
+
+func keys_HEALTHZ_test(mc *mockServer) error {
+
+	// // follow and wait
+	// str, err := redis.String(mc.Do("FOLLOW", "localhost", mc.alt.port))
+	// if err != nil {
+	// 	return err
+	// }
+	// if str != "OK" {
+	// 	return errors.New("not ok")
+	// }
+	// start := time.Now()
+	// for time.Since(start) < time.Second*5 {
+	// 	str, err = redis.String(mc.Do("HEALTHZ"))
+	// 	if str == "OK" {
+	// 		err = nil
+	// 		break
+	// 	}
+	// 	time.Sleep(time.Second / 4)
+	// }
+	// if err != nil {
+	// 	return err
+	// }
+
+	return mc.DoBatch(
+		Do("HEALTHZ").OK(),
+		Do("HEALTHZ").JSON().OK(),
+		// Do("FOLLOW", "no", "one").OK(),
+		Do("HEALTHZ", "arg").Err(`wrong number of arguments for 'healthz' command`),
 	)
 }

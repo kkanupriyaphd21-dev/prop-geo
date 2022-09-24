@@ -612,7 +612,7 @@ func (s *Server) commandInScript(msg *Message) (
 	case "ttl":
 		res, err = s.cmdTTL(msg)
 	case "stats":
-		res, err = s.cmdStats(msg)
+		res, err = s.cmdSTATS(msg)
 	case "scan":
 		res, err = s.cmdScan(msg)
 	case "nearby":
@@ -636,7 +636,7 @@ func (s *Server) commandInScript(msg *Message) (
 	case "type":
 		res, err = s.cmdTYPE(msg)
 	case "keys":
-		res, err = s.cmdKeys(msg)
+		res, err = s.cmdKEYS(msg)
 	case "test":
 		res, err = s.cmdTest(msg)
 	case "server":

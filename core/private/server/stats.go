@@ -45,22 +45,23 @@ func readMemStats() runtime.MemStats {
 	return ms
 }
 
-func (s *Server) cmdStats(msg *Message) (res resp.Value, err error) {
+// STATS key [key...]
+func (s *Server) cmdSTATS(msg *Message) (resp.Value, error) {
 	start := time.Now()
-	vs := msg.Args[1:]
-	var ms = []map[string]interface{}{}
 
-	if len(vs) == 0 {
-		return NOMessage, errInvalidNumberOfArguments
+	// >> Args
+
+	args := msg.Args
+	if len(args) < 2 {
+		return retrerr(errInvalidNumberOfArguments)
 	}
+
+	// >> Operation
+
 	var vals []resp.Value
-	var key string
-	var ok bool
-	for {
-		vs, key, ok = tokenval(vs)
-		if !ok {
-			break
-		}
+	var ms = []map[string]interface{}{}
+	for i := 1; i < len(args); i++ {
+		key := args[i]
 		col, _ := s.cols.Get(key)
 		if col != nil {
 			m := make(map[string]interface{})
@@ -83,36 +84,45 @@ func (s *Server) cmdStats(msg *Message) (res resp.Value, err error) {
 			}
 		}
 	}
-	switch msg.OutputType {
-	case JSON:
 
-		data, err := json.Marshal(ms)
-		if err != nil {
-			return NOMessage, err
-		}
-		res = resp.StringValue(`{"ok":true,"stats":` + string(data) + `,"elapsed":"` + time.Since(start).String() + "\"}")
-	case RESP:
-		res = resp.ArrayValue(vals)
+	// >> Response
+
+	if msg.OutputType == JSON {
+		data, _ := json.Marshal(ms)
+		return resp.StringValue(`{"ok":true,"stats":` + string(data) +
+			`,"elapsed":"` + time.Since(start).String() + "\"}"), nil
 	}
-	return res, nil
+	return resp.ArrayValue(vals), nil
 }
 
-func (s *Server) cmdHealthz(msg *Message) (res resp.Value, err error) {
+// HEALTHZ
+func (s *Server) cmdHEALTHZ(msg *Message) (resp.Value, error) {
 	start := time.Now()
+
+	// >> Args
+
+	args := msg.Args
+	if len(args) != 1 {
+		return retrerr(errInvalidNumberOfArguments)
+	}
+
+	// >> Operation
+
 	if s.config.followHost() != "" {
 		m := make(map[string]interface{})
 		s.basicStats(m)
 		if fmt.Sprintf("%v", m["caught_up"]) != "true" {
-			return NOMessage, errors.New("not caught up")
+			return retrerr(errors.New("not caught up"))
 		}
 	}
-	switch msg.OutputType {
-	case JSON:
-		res = resp.StringValue(`{"ok":true,"elapsed":"` + time.Since(start).String() + "\"}")
-	case RESP:
-		res = resp.SimpleStringValue("OK")
+
+	// >> Response
+
+	if msg.OutputType == JSON {
+		return resp.StringValue(`{"ok":true,"elapsed":"` +
+			time.Since(start).String() + "\"}"), nil
 	}
-	return res, nil
+	return resp.SimpleStringValue("OK"), nil
 }
 
 func (s *Server) cmdServer(msg *Message) (res resp.Value, err error) {

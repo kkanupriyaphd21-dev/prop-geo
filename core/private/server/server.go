@@ -623,28 +623,30 @@ func (s *Server) watchAutoGC() {
 	}
 }
 
+func (s *Server) checkOutOfMemory() {
+	if s.stopServer.on() {
+		return
+	}
+	oom := s.outOfMemory.on()
+	var mem runtime.MemStats
+	if s.config.maxMemory() == 0 {
+		if oom {
+			s.outOfMemory.set(false)
+		}
+		return
+	}
+	if oom {
+		runtime.GC()
+	}
+	runtime.ReadMemStats(&mem)
+	s.outOfMemory.set(int(mem.HeapAlloc) > s.config.maxMemory())
+}
+
 func (s *Server) watchOutOfMemory() {
 	t := time.NewTicker(time.Second * 2)
 	defer t.Stop()
-	var mem runtime.MemStats
 	for range t.C {
-		func() {
-			if s.stopServer.on() {
-				return
-			}
-			oom := s.outOfMemory.on()
-			if s.config.maxMemory() == 0 {
-				if oom {
-					s.outOfMemory.set(false)
-				}
-				return
-			}
-			if oom {
-				runtime.GC()
-			}
-			runtime.ReadMemStats(&mem)
-			s.outOfMemory.set(int(mem.HeapAlloc) > s.config.maxMemory())
-		}()
+		s.checkOutOfMemory()
 	}
 }
 
@@ -1078,11 +1080,11 @@ func (s *Server) command(msg *Message, client *Client) (
 	case "readonly":
 		res, err = s.cmdReadOnly(msg)
 	case "stats":
-		res, err = s.cmdStats(msg)
+		res, err = s.cmdSTATS(msg)
 	case "server":
 		res, err = s.cmdServer(msg)
 	case "healthz":
-		res, err = s.cmdHealthz(msg)
+		res, err = s.cmdHEALTHZ(msg)
 	case "info":
 		res, err = s.cmdInfo(msg)
 	case "scan":
@@ -1108,7 +1110,7 @@ func (s *Server) command(msg *Message, client *Client) (
 	case "type":
 		res, err = s.cmdTYPE(msg)
 	case "keys":
-		res, err = s.cmdKeys(msg)
+		res, err = s.cmdKEYS(msg)
 	case "output":
 		res, err = s.cmdOutput(msg)
 	case "aof":
