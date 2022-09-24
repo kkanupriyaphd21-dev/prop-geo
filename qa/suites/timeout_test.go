@@ -54,22 +54,27 @@ func setup(mc *mockServer, count int, points bool) (err error) {
 	return
 }
 
-func timeout_spatial_test(mc *mockServer) (err error) {
-	err = setup(mc, 10000, true)
+func timeout_spatial_test(mc *mockServer) error {
+	err := setup(mc, 10000, true)
+	if err != nil {
+		return err
+	}
+	return mc.DoBatch(
+		Do("SCAN", "mykey", "WHERE", "foo", -1, 2, "COUNT").Str("10000"),
+		Do("INTERSECTS", "mykey", "WHERE", "foo", -1, 2, "COUNT", "BOUNDS", -90, -180, 90, 180).Str("10000"),
+		Do("WITHIN", "mykey", "WHERE", "foo", -1, 2, "COUNT", "BOUNDS", -90, -180, 90, 180).Str("10000"),
 
-	return mc.DoBatch([][]interface{}{
-		{"SCAN", "mykey", "WHERE", "foo", -1, 2, "COUNT"}, {"10000"},
-		{"INTERSECTS", "mykey", "WHERE", "foo", -1, 2, "COUNT", "BOUNDS", -90, -180, 90, 180}, {"10000"},
-		{"WITHIN", "mykey", "WHERE", "foo", -1, 2, "COUNT", "BOUNDS", -90, -180, 90, 180}, {"10000"},
-
-		{"TIMEOUT", "0.000001", "SCAN", "mykey", "WHERE", "foo", -1, 2, "COUNT"}, {"ERR timeout"},
-		{"TIMEOUT", "0.000001", "INTERSECTS", "mykey", "WHERE", "foo", -1, 2, "COUNT", "BOUNDS", -90, -180, 90, 180}, {"ERR timeout"},
-		{"TIMEOUT", "0.000001", "WITHIN", "mykey", "WHERE", "foo", -1, 2, "COUNT", "BOUNDS", -90, -180, 90, 180}, {"ERR timeout"},
-	})
+		Do("TIMEOUT", "0.000001", "SCAN", "mykey", "WHERE", "foo", -1, 2, "COUNT").Err("timeout"),
+		Do("TIMEOUT", "0.000001", "INTERSECTS", "mykey", "WHERE", "foo", -1, 2, "COUNT", "BOUNDS", -90, -180, 90, 180).Err("timeout"),
+		Do("TIMEOUT", "0.000001", "WITHIN", "mykey", "WHERE", "foo", -1, 2, "COUNT", "BOUNDS", -90, -180, 90, 180).Err("timeout"),
+	)
 }
 
 func timeout_search_test(mc *mockServer) (err error) {
 	err = setup(mc, 10000, false)
+	if err != nil {
+		return err
+	}
 
 	return mc.DoBatch([][]interface{}{
 		{"SEARCH", "mykey", "MATCH", "val:*", "COUNT"}, {"10000"},
@@ -122,6 +127,9 @@ func scriptTimeoutErr(v interface{}) (resp, expect interface{}) {
 
 func timeout_within_scripts_test(mc *mockServer) (err error) {
 	err = setup(mc, 10000, true)
+	if err != nil {
+		return err
+	}
 
 	script1 := "return propgeo.call('timeout', 10, 'SCAN', 'mykey', 'WHERE', 'foo', -1, 2, 'COUNT')"
 	script2 := "return propgeo.call('timeout', 0.000001, 'SCAN', 'mykey', 'WHERE', 'foo', -1, 2, 'COUNT')"

@@ -3,11 +3,10 @@ package tests
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"math/rand"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -24,7 +23,7 @@ func mockCleanup(silent bool) {
 	if !silent {
 		fmt.Printf("Cleanup: may take some time... ")
 	}
-	files, _ := ioutil.ReadDir(".")
+	files, _ := os.ReadDir(".")
 	for _, file := range files {
 		if strings.HasPrefix(file.Name(), "data-mock-") {
 			os.RemoveAll(file.Name())
@@ -36,21 +35,20 @@ func mockCleanup(silent bool) {
 }
 
 type mockServer struct {
-	port int
-	//join string
-	//n    *finn.Node
-	//m    *Machine
-	conn redis.Conn
+	port   int
+	conn   redis.Conn
+	ioJSON bool
+	// alt    *mockServer
 }
 
-func mockOpenServer(silent bool) (*mockServer, error) {
+func mockOpenServer(silent, metrics bool) (*mockServer, error) {
 	rand.Seed(time.Now().UnixNano())
 	port := rand.Int()%20000 + 20000
 	dir := fmt.Sprintf("data-mock-%d", port)
 	if !silent {
 		fmt.Printf("Starting test server at port %d\n", port)
 	}
-	logOutput := ioutil.Discard
+	logOutput := io.Discard
 	if os.Getenv("PRINTLOG") == "1" {
 		logOutput = os.Stderr
 	}
@@ -59,11 +57,13 @@ func mockOpenServer(silent bool) (*mockServer, error) {
 	tlog.SetOutput(logOutput)
 	go func() {
 		opts := server.Options{
-			Host:        "localhost",
-			Port:        port,
-			Dir:         dir,
-			UseHTTP:     true,
-			MetricsAddr: ":4321",
+			Host:    "localhost",
+			Port:    port,
+			Dir:     dir,
+			UseHTTP: true,
+		}
+		if metrics {
+			opts.MetricsAddr = ":4321"
 		}
 		if err := server.Serve(opts); err != nil {
 			log.Fatal(err)
@@ -80,7 +80,7 @@ func (s *mockServer) waitForStartup() error {
 	var lerr error
 	start := time.Now()
 	for {
-		if time.Now().Sub(start) > time.Second*5 {
+		if time.Since(start) > time.Second*5 {
 			if lerr != nil {
 				return lerr
 			}
@@ -159,7 +159,28 @@ func (s *mockServer) Do(commandName string, args ...interface{}) (interface{}, e
 	return resps[0], nil
 }
 
-func (mc *mockServer) DoBatch(commands ...interface{}) error { //[][]interface{}) error {
+func (mc *mockServer) DoBatch(commands ...interface{}) error {
+	// Probe for I/O tests
+	if len(commands) > 0 {
+		if _, ok := commands[0].(*IO); ok {
+			var cmds []*IO
+			// If the first is an I/O test then all must be
+			for _, cmd := range commands {
+				if cmd, ok := cmd.(*IO); ok {
+					cmds = append(cmds, cmd)
+				} else {
+					return errors.New("DoBatch cannot mix I/O tests with other kinds")
+				}
+			}
+			for i, cmd := range cmds {
+				if err := mc.doIOTest(i, cmd); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
+
 	var tag string
 	for _, commands := range commands {
 		switch commands := commands.(type) {
@@ -181,6 +202,10 @@ func (mc *mockServer) DoBatch(commands ...interface{}) error { //[][]interface{}
 				}
 			}
 			tag = ""
+		case *IO:
+			return errors.New("DoBatch cannot mix I/O tests with other kinds")
+		default:
+			return fmt.Errorf("Unknown command input")
 		}
 	}
 	return nil
@@ -280,28 +305,4 @@ func (mc *mockServer) DoExpect(expect interface{}, commandName string, args ...i
 		return fmt.Errorf("expected '%v', got '%v'", expect, resp)
 	}
 	return nil
-}
-func round(v float64, decimals int) float64 {
-	var pow float64 = 1
-	for i := 0; i < decimals; i++ {
-		pow *= 10
-	}
-	return float64(int((v*pow)+0.5)) / pow
-}
-
-func exfloat(v float64, decimals int) func(v interface{}) (resp, expect interface{}) {
-	ex := round(v, decimals)
-	return func(v interface{}) (resp, expect interface{}) {
-		var s string
-		if b, ok := v.([]uint8); ok {
-			s = string(b)
-		} else {
-			s = fmt.Sprintf("%v", v)
-		}
-		n, err := strconv.ParseFloat(s, 64)
-		if err != nil {
-			return v, ex
-		}
-		return round(n, decimals), ex
-	}
 }

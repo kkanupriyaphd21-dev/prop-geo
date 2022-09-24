@@ -376,6 +376,7 @@ func (s *Server) netServe() error {
 			client.id = int(atomic.AddInt64(&clientID, 1))
 			client.opened = time.Now()
 			client.remoteAddr = conn.RemoteAddr().String()
+			client.closer = conn
 
 			// add client to server map
 			s.connsmu.Lock()
@@ -623,28 +624,30 @@ func (s *Server) watchAutoGC() {
 	}
 }
 
+func (s *Server) checkOutOfMemory() {
+	if s.stopServer.on() {
+		return
+	}
+	oom := s.outOfMemory.on()
+	var mem runtime.MemStats
+	if s.config.maxMemory() == 0 {
+		if oom {
+			s.outOfMemory.set(false)
+		}
+		return
+	}
+	if oom {
+		runtime.GC()
+	}
+	runtime.ReadMemStats(&mem)
+	s.outOfMemory.set(int(mem.HeapAlloc) > s.config.maxMemory())
+}
+
 func (s *Server) watchOutOfMemory() {
 	t := time.NewTicker(time.Second * 2)
 	defer t.Stop()
-	var mem runtime.MemStats
 	for range t.C {
-		func() {
-			if s.stopServer.on() {
-				return
-			}
-			oom := s.outOfMemory.on()
-			if s.config.maxMemory() == 0 {
-				if oom {
-					s.outOfMemory.set(false)
-				}
-				return
-			}
-			if oom {
-				runtime.GC()
-			}
-			runtime.ReadMemStats(&mem)
-			s.outOfMemory.set(int(mem.HeapAlloc) > s.config.maxMemory())
-		}()
+		s.checkOutOfMemory()
 	}
 }
 
@@ -1014,17 +1017,17 @@ func (s *Server) command(msg *Message, client *Client) (
 	case "fset":
 		res, d, err = s.cmdFSET(msg)
 	case "del":
-		res, d, err = s.cmdDel(msg)
+		res, d, err = s.cmdDEL(msg)
 	case "pdel":
-		res, d, err = s.cmdPdel(msg)
+		res, d, err = s.cmdPDEL(msg)
 	case "drop":
-		res, d, err = s.cmdDrop(msg)
+		res, d, err = s.cmdDROP(msg)
 	case "flushdb":
 		res, d, err = s.cmdFLUSHDB(msg)
 	case "rename":
-		res, d, err = s.cmdRename(msg)
+		res, d, err = s.cmdRENAME(msg)
 	case "renamenx":
-		res, d, err = s.cmdRename(msg)
+		res, d, err = s.cmdRENAME(msg)
 	case "sethook":
 		res, d, err = s.cmdSetHook(msg)
 	case "delhook":
@@ -1072,13 +1075,13 @@ func (s *Server) command(msg *Message, client *Client) (
 	case "readonly":
 		res, err = s.cmdReadOnly(msg)
 	case "stats":
-		res, err = s.cmdStats(msg)
+		res, err = s.cmdSTATS(msg)
 	case "server":
-		res, err = s.cmdServer(msg)
+		res, err = s.cmdSERVER(msg)
 	case "healthz":
-		res, err = s.cmdHealthz(msg)
+		res, err = s.cmdHEALTHZ(msg)
 	case "info":
-		res, err = s.cmdInfo(msg)
+		res, err = s.cmdINFO(msg)
 	case "scan":
 		res, err = s.cmdScan(msg)
 	case "nearby":
@@ -1090,9 +1093,9 @@ func (s *Server) command(msg *Message, client *Client) (
 	case "search":
 		res, err = s.cmdSearch(msg)
 	case "bounds":
-		res, err = s.cmdBounds(msg)
+		res, err = s.cmdBOUNDS(msg)
 	case "get":
-		res, err = s.cmdGet(msg)
+		res, err = s.cmdGET(msg)
 	case "jget":
 		res, err = s.cmdJget(msg)
 	case "jset":
@@ -1100,9 +1103,9 @@ func (s *Server) command(msg *Message, client *Client) (
 	case "jdel":
 		res, d, err = s.cmdJdel(msg)
 	case "type":
-		res, err = s.cmdType(msg)
+		res, err = s.cmdTYPE(msg)
 	case "keys":
-		res, err = s.cmdKeys(msg)
+		res, err = s.cmdKEYS(msg)
 	case "output":
 		res, err = s.cmdOutput(msg)
 	case "aof":
@@ -1132,7 +1135,7 @@ func (s *Server) command(msg *Message, client *Client) (
 			return s.command(msg, client)
 		}
 	case "client":
-		res, err = s.cmdClient(msg, client)
+		res, err = s.cmdCLIENT(msg, client)
 	case "eval", "evalro", "evalna":
 		res, err = s.cmdEvalUnified(false, msg)
 	case "evalsha", "evalrosha", "evalnasha":
@@ -1154,6 +1157,7 @@ func (s *Server) command(msg *Message, client *Client) (
 	case "monitor":
 		res, err = s.cmdMonitor(msg)
 	}
+
 	s.sendMonitor(err, msg, client, false)
 	return
 }
