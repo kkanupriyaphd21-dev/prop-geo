@@ -1,7 +1,7 @@
 package tests
 
 import (
-	"io"
+	"io/ioutil"
 	"net/http"
 	"strings"
 	"testing"
@@ -13,7 +13,7 @@ func downloadURLWithStatusCode(t *testing.T, u string) (int, string) {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}

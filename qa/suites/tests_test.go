@@ -30,7 +30,7 @@ func TestAll(t *testing.T) {
 	mockCleanup(false)
 	defer mockCleanup(false)
 
-	ch := make(chan os.Signal, 1)
+	ch := make(chan os.Signal)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-ch
@@ -38,20 +38,11 @@ func TestAll(t *testing.T) {
 		os.Exit(1)
 	}()
 
-	mc, err := mockOpenServer(false, true)
+	mc, err := mockOpenServer(false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer mc.Close()
-
-	// mc2, err := mockOpenServer(false, false)
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-	// defer mc2.Close()
-	// mc.alt = mc2
-	// mc2.alt = mc
-
 	runSubTest(t, "keys", mc, subTestKeys)
 	runSubTest(t, "json", mc, subTestJSON)
 	runSubTest(t, "search", mc, subTestSearch)
@@ -80,10 +71,10 @@ func runStep(t *testing.T, mc *mockServer, name string, step func(mc *mockServer
 			mc.ResetConn()
 			defer mc.ResetConn()
 			// clear the database so the test is consistent
-			if err := mc.DoBatch(
-				Do("OUTPUT", "resp").OK(),
-				Do("FLUSHDB").OK(),
-			); err != nil {
+			if err := mc.DoBatch([][]interface{}{
+				{"OUTPUT", "resp"}, {"OK"},
+				{"FLUSHDB"}, {"OK"},
+			}); err != nil {
 				return err
 			}
 			if err := step(mc); err != nil {
@@ -91,9 +82,8 @@ func runStep(t *testing.T, mc *mockServer, name string, step func(mc *mockServer
 			}
 			return nil
 		}(); err != nil {
-			fmt.Fprintf(os.Stderr, "["+red+"fail"+clear+"]: %s\n", name)
+			fmt.Printf("["+red+"fail"+clear+"]: %s\n", name)
 			t.Fatal(err)
-			// t.Fatal(err)
 		}
 		fmt.Printf("["+green+"ok"+clear+"]: %s\n", name)
 	})
@@ -103,7 +93,7 @@ func BenchmarkAll(b *testing.B) {
 	mockCleanup(true)
 	defer mockCleanup(true)
 
-	ch := make(chan os.Signal, 1)
+	ch := make(chan os.Signal)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-ch
@@ -111,7 +101,7 @@ func BenchmarkAll(b *testing.B) {
 		os.Exit(1)
 	}()
 
-	mc, err := mockOpenServer(true, true)
+	mc, err := mockOpenServer(true)
 	if err != nil {
 		b.Fatal(err)
 	}

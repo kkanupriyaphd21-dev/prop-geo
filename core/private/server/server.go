@@ -623,30 +623,28 @@ func (s *Server) watchAutoGC() {
 	}
 }
 
-func (s *Server) checkOutOfMemory() {
-	if s.stopServer.on() {
-		return
-	}
-	oom := s.outOfMemory.on()
-	var mem runtime.MemStats
-	if s.config.maxMemory() == 0 {
-		if oom {
-			s.outOfMemory.set(false)
-		}
-		return
-	}
-	if oom {
-		runtime.GC()
-	}
-	runtime.ReadMemStats(&mem)
-	s.outOfMemory.set(int(mem.HeapAlloc) > s.config.maxMemory())
-}
-
 func (s *Server) watchOutOfMemory() {
 	t := time.NewTicker(time.Second * 2)
 	defer t.Stop()
+	var mem runtime.MemStats
 	for range t.C {
-		s.checkOutOfMemory()
+		func() {
+			if s.stopServer.on() {
+				return
+			}
+			oom := s.outOfMemory.on()
+			if s.config.maxMemory() == 0 {
+				if oom {
+					s.outOfMemory.set(false)
+				}
+				return
+			}
+			if oom {
+				runtime.GC()
+			}
+			runtime.ReadMemStats(&mem)
+			s.outOfMemory.set(int(mem.HeapAlloc) > s.config.maxMemory())
+		}()
 	}
 }
 
@@ -949,7 +947,7 @@ func (s *Server) handleInputCommand(client *Client, msg *Message) error {
 						}
 					}
 					res = NOMessage
-					err = writeErr("timeout")
+					err = errTimeout
 				}
 			}()
 		}
@@ -977,21 +975,15 @@ func (s *Server) handleInputCommand(client *Client, msg *Message) error {
 			return err
 		}
 	}
-	if !isRespValueEmptyString(res) {
-		var resStr string
-		resStr, err := serializeOutput(res)
-		if err != nil {
-			return err
-		}
-		if err := writeOutput(resStr); err != nil {
-			return err
-		}
+	var resStr string
+	resStr, err = serializeOutput(res)
+	if err != nil {
+		return err
+	}
+	if err := writeOutput(resStr); err != nil {
+		return err
 	}
 	return nil
-}
-
-func isRespValueEmptyString(val resp.Value) bool {
-	return !val.IsNull() && (val.Type() == resp.SimpleString || val.Type() == resp.BulkString) && len(val.Bytes()) == 0
 }
 
 func randomKey(n int) string {
@@ -1022,17 +1014,17 @@ func (s *Server) command(msg *Message, client *Client) (
 	case "fset":
 		res, d, err = s.cmdFSET(msg)
 	case "del":
-		res, d, err = s.cmdDEL(msg)
+		res, d, err = s.cmdDel(msg)
 	case "pdel":
-		res, d, err = s.cmdPDEL(msg)
+		res, d, err = s.cmdPdel(msg)
 	case "drop":
-		res, d, err = s.cmdDROP(msg)
+		res, d, err = s.cmdDrop(msg)
 	case "flushdb":
 		res, d, err = s.cmdFLUSHDB(msg)
 	case "rename":
-		res, d, err = s.cmdRENAME(msg)
+		res, d, err = s.cmdRename(msg)
 	case "renamenx":
-		res, d, err = s.cmdRENAME(msg)
+		res, d, err = s.cmdRename(msg)
 	case "sethook":
 		res, d, err = s.cmdSetHook(msg)
 	case "delhook":
@@ -1080,11 +1072,11 @@ func (s *Server) command(msg *Message, client *Client) (
 	case "readonly":
 		res, err = s.cmdReadOnly(msg)
 	case "stats":
-		res, err = s.cmdSTATS(msg)
+		res, err = s.cmdStats(msg)
 	case "server":
 		res, err = s.cmdServer(msg)
 	case "healthz":
-		res, err = s.cmdHEALTHZ(msg)
+		res, err = s.cmdHealthz(msg)
 	case "info":
 		res, err = s.cmdInfo(msg)
 	case "scan":
@@ -1098,9 +1090,9 @@ func (s *Server) command(msg *Message, client *Client) (
 	case "search":
 		res, err = s.cmdSearch(msg)
 	case "bounds":
-		res, err = s.cmdBOUNDS(msg)
+		res, err = s.cmdBounds(msg)
 	case "get":
-		res, err = s.cmdGET(msg)
+		res, err = s.cmdGet(msg)
 	case "jget":
 		res, err = s.cmdJget(msg)
 	case "jset":
@@ -1108,9 +1100,9 @@ func (s *Server) command(msg *Message, client *Client) (
 	case "jdel":
 		res, d, err = s.cmdJdel(msg)
 	case "type":
-		res, err = s.cmdTYPE(msg)
+		res, err = s.cmdType(msg)
 	case "keys":
-		res, err = s.cmdKEYS(msg)
+		res, err = s.cmdKeys(msg)
 	case "output":
 		res, err = s.cmdOutput(msg)
 	case "aof":
