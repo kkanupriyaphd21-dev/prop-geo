@@ -4,15 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
 	"github.com/tidwall/sjson"
-	"github.com/tidwall/propgeo/core"
 	tlog "github.com/tidwall/propgeo/internal/log"
 	"github.com/tidwall/propgeo/internal/server"
 )
@@ -35,51 +35,84 @@ func mockCleanup(silent bool) {
 }
 
 type mockServer struct {
-	port   int
-	conn   redis.Conn
-	ioJSON bool
-	// alt    *mockServer
+	port     int
+	conn     redis.Conn
+	ioJSON   bool
+	dir      string
+	shutdown chan bool
 }
 
-func mockOpenServer(silent, metrics bool) (*mockServer, error) {
+func (mc *mockServer) readAOF() ([]byte, error) {
+	return os.ReadFile(filepath.Join(mc.dir, "appendonly.aof"))
+}
+
+type MockServerOptions struct {
+	AOFData []byte
+	Silent  bool
+	Metrics bool
+}
+
+func mockOpenServer(opts MockServerOptions) (*mockServer, error) {
 	rand.Seed(time.Now().UnixNano())
 	port := rand.Int()%20000 + 20000
 	dir := fmt.Sprintf("data-mock-%d", port)
-	if !silent {
+	if !opts.Silent {
 		fmt.Printf("Starting test server at port %d\n", port)
+	}
+	if len(opts.AOFData) > 0 {
+		if err := os.MkdirAll(dir, 0777); err != nil {
+			return nil, err
+		}
+		err := os.WriteFile(filepath.Join(dir, "appendonly.aof"),
+			opts.AOFData, 0666)
+		if err != nil {
+			return nil, err
+		}
 	}
 	logOutput := io.Discard
 	if os.Getenv("PRINTLOG") == "1" {
 		logOutput = os.Stderr
+		tlog.Level = 3
 	}
-	core.DevMode = true
-	s := &mockServer{port: port}
+	shutdown := make(chan bool)
+	s := &mockServer{port: port, dir: dir, shutdown: shutdown}
 	tlog.SetOutput(logOutput)
+	var ferrt int32 // atomic flag for when ferr has been set
+	var ferr error  // ferr for when the server fails to start
 	go func() {
-		opts := server.Options{
-			Host:    "localhost",
-			Port:    port,
-			Dir:     dir,
-			UseHTTP: true,
+		sopts := server.Options{
+			Host:              "localhost",
+			Port:              port,
+			Dir:               dir,
+			UseHTTP:           true,
+			DevMode:           true,
+			AppendOnly:        true,
+			Shutdown:          shutdown,
+			ShowDebugMessages: true,
 		}
-		if metrics {
-			opts.MetricsAddr = ":4321"
+		if opts.Metrics {
+			sopts.MetricsAddr = ":4321"
 		}
-		if err := server.Serve(opts); err != nil {
-			log.Fatal(err)
+		err := server.Serve(sopts)
+		if err != nil {
+			ferr = err
+			atomic.StoreInt32(&ferrt, 1)
 		}
 	}()
-	if err := s.waitForStartup(); err != nil {
+	if err := s.waitForStartup(&ferr, &ferrt); err != nil {
 		s.Close()
 		return nil, err
 	}
 	return s, nil
 }
 
-func (s *mockServer) waitForStartup() error {
+func (s *mockServer) waitForStartup(ferr *error, ferrt *int32) error {
 	var lerr error
 	start := time.Now()
 	for {
+		if atomic.LoadInt32(ferrt) != 0 {
+			return *ferr
+		}
 		if time.Since(start) > time.Second*5 {
 			if lerr != nil {
 				return lerr
@@ -106,8 +139,12 @@ func (s *mockServer) waitForStartup() error {
 }
 
 func (mc *mockServer) Close() {
+	mc.shutdown <- true
 	if mc.conn != nil {
 		mc.conn.Close()
+	}
+	if mc.dir != "" {
+		os.RemoveAll(mc.dir)
 	}
 }
 

@@ -26,6 +26,18 @@ const (
 	white   = "\x1b[37m"
 )
 
+// type mockTest struct {
+// }
+
+// func mockTestInit() *mockTest {
+// 	mt := &mockTest{}
+// 	return mt
+// }
+
+// func (mt *mockTest) Cleanup() {
+
+// }
+
 func TestAll(t *testing.T) {
 	mockCleanup(false)
 	defer mockCleanup(false)
@@ -38,19 +50,16 @@ func TestAll(t *testing.T) {
 		os.Exit(1)
 	}()
 
-	mc, err := mockOpenServer(false, true)
+	mc, err := mockOpenServer(MockServerOptions{
+		Silent:  false,
+		Metrics: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	// log.Printf("Waiting a second for everything to cleanly start...")
+	// time.Sleep(time.Second * 2)
 	defer mc.Close()
-
-	// mc2, err := mockOpenServer(false, false)
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-	// defer mc2.Close()
-	// mc.alt = mc2
-	// mc2.alt = mc
 
 	runSubTest(t, "keys", mc, subTestKeys)
 	runSubTest(t, "json", mc, subTestJSON)
@@ -62,6 +71,7 @@ func TestAll(t *testing.T) {
 	runSubTest(t, "info", mc, subTestInfo)
 	runSubTest(t, "timeouts", mc, subTestTimeout)
 	runSubTest(t, "metrics", mc, subTestMetrics)
+	runSubTest(t, "aof", mc, subTestAOF)
 }
 
 func runSubTest(t *testing.T, name string, mc *mockServer, test func(t *testing.T, mc *mockServer)) {
@@ -111,7 +121,9 @@ func BenchmarkAll(b *testing.B) {
 		os.Exit(1)
 	}()
 
-	mc, err := mockOpenServer(true, true)
+	mc, err := mockOpenServer(MockServerOptions{
+		Silent: true, Metrics: true,
+	})
 	if err != nil {
 		b.Fatal(err)
 	}
