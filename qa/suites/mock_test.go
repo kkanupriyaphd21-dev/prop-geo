@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,7 @@ import (
 
 	"github.com/gomodule/redigo/redis"
 	"github.com/tidwall/sjson"
-	tlog "github.com/tidwall/propgeo/internal/log"
+	"github.com/tidwall/propgeo/internal/log"
 	"github.com/tidwall/propgeo/internal/server"
 )
 
@@ -36,6 +37,7 @@ func mockCleanup(silent bool) {
 
 type mockServer struct {
 	port     int
+	mport    int
 	conn     redis.Conn
 	ioJSON   bool
 	dir      string
@@ -46,15 +48,41 @@ func (mc *mockServer) readAOF() ([]byte, error) {
 	return os.ReadFile(filepath.Join(mc.dir, "appendonly.aof"))
 }
 
+func (mc *mockServer) metricsPort() int {
+	return mc.mport
+}
+
 type MockServerOptions struct {
 	AOFData []byte
 	Silent  bool
 	Metrics bool
 }
 
+var nextPort int32 = 10000
+
+func getNextPort() int {
+	// choose a valid port between 10000-50000
+	for {
+		port := int(atomic.AddInt32(&nextPort, 1))
+		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		if err == nil {
+			ln.Close()
+			return port
+		}
+	}
+}
+
 func mockOpenServer(opts MockServerOptions) (*mockServer, error) {
+
+	logOutput := io.Discard
+	if os.Getenv("PRINTLOG") == "1" {
+		logOutput = os.Stderr
+		log.SetLevel(3)
+	}
+	log.SetOutput(logOutput)
+
 	rand.Seed(time.Now().UnixNano())
-	port := rand.Int()%20000 + 20000
+	port := getNextPort()
 	dir := fmt.Sprintf("data-mock-%d", port)
 	if !opts.Silent {
 		fmt.Printf("Starting test server at port %d\n", port)
@@ -69,14 +97,12 @@ func mockOpenServer(opts MockServerOptions) (*mockServer, error) {
 			return nil, err
 		}
 	}
-	logOutput := io.Discard
-	if os.Getenv("PRINTLOG") == "1" {
-		logOutput = os.Stderr
-		tlog.Level = 3
-	}
+
 	shutdown := make(chan bool)
 	s := &mockServer{port: port, dir: dir, shutdown: shutdown}
-	tlog.SetOutput(logOutput)
+	if opts.Metrics {
+		s.mport = getNextPort()
+	}
 	var ferrt int32 // atomic flag for when ferr has been set
 	var ferr error  // ferr for when the server fails to start
 	go func() {
@@ -91,7 +117,7 @@ func mockOpenServer(opts MockServerOptions) (*mockServer, error) {
 			ShowDebugMessages: true,
 		}
 		if opts.Metrics {
-			sopts.MetricsAddr = ":4321"
+			sopts.MetricsAddr = fmt.Sprintf(":%d", s.mport)
 		}
 		err := server.Serve(sopts)
 		if err != nil {
