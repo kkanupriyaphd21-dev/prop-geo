@@ -36,6 +36,7 @@ func mockCleanup(silent bool) {
 }
 
 type mockServer struct {
+	closed   bool
 	port     int
 	mport    int
 	conn     redis.Conn
@@ -53,9 +54,10 @@ func (mc *mockServer) metricsPort() int {
 }
 
 type MockServerOptions struct {
-	AOFData []byte
-	Silent  bool
-	Metrics bool
+	AOFFileName string
+	AOFData     []byte
+	Silent      bool
+	Metrics     bool
 }
 
 var nextPort int32 = 10000
@@ -88,10 +90,13 @@ func mockOpenServer(opts MockServerOptions) (*mockServer, error) {
 		fmt.Printf("Starting test server at port %d\n", port)
 	}
 	if len(opts.AOFData) > 0 {
+		if opts.AOFFileName == "" {
+			opts.AOFFileName = "appendonly.aof"
+		}
 		if err := os.MkdirAll(dir, 0777); err != nil {
 			return nil, err
 		}
-		err := os.WriteFile(filepath.Join(dir, "appendonly.aof"),
+		err := os.WriteFile(filepath.Join(dir, opts.AOFFileName),
 			opts.AOFData, 0666)
 		if err != nil {
 			return nil, err
@@ -165,6 +170,10 @@ func (s *mockServer) waitForStartup(ferr *error, ferrt *int32) error {
 }
 
 func (mc *mockServer) Close() {
+	if mc == nil || mc.closed {
+		return
+	}
+	mc.closed = true
 	mc.shutdown <- true
 	if mc.conn != nil {
 		mc.conn.Close()

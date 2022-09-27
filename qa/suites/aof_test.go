@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"net/http"
@@ -13,13 +14,17 @@ import (
 	"time"
 
 	"github.com/gomodule/redigo/redis"
+
+	_ "embed"
 )
 
 func subTestAOF(g *testGroup) {
 	g.regSubTest("loading", aof_loading_test)
+	g.regSubTest("migrate", aof_migrate_test)
 	g.regSubTest("AOF", aof_AOF_test)
 	g.regSubTest("AOFMD5", aof_AOFMD5_test)
 	g.regSubTest("AOFSHRINK", aof_AOFSHRINK_test)
+	g.regSubTest("READONLY", aof_READONLY_test)
 }
 
 func loadAOFAndClose(aof any) error {
@@ -272,4 +277,71 @@ func aof_AOFSHRINK_test(mc *mockServer) error {
 		return fmt.Errorf("expected > 0, got %d", nmsgs)
 	}
 	return err
+}
+
+func aof_READONLY_test(mc *mockServer) error {
+	return mc.DoBatch(
+		Do("SET", "mykey", "myid", "POINT", "10", "10").OK(),
+		Do("READONLY", "yes").OK(),
+		Do("SET", "mykey", "myid", "POINT", "10", "10").Err("read only"),
+		Do("READONLY", "no").OK(),
+		Do("SET", "mykey", "myid", "POINT", "10", "10").OK(),
+		Do("READONLY").Err("wrong number of arguments for 'readonly' command"),
+		Do("READONLY", "maybe").Err("invalid argument 'maybe'"),
+	)
+}
+
+//go:embed aof_legacy
+var aofLegacy []byte
+
+func aof_migrate_test(mc *mockServer) error {
+	var aof []byte
+	for i := 0; i < 10000; i++ {
+		aof = append(aof, aofLegacy...)
+	}
+	var mc2 *mockServer
+	var err error
+	defer func() {
+		mc2.Close()
+	}()
+	mc2, err = mockOpenServer(MockServerOptions{
+		AOFFileName: "aof",
+		AOFData:     aof,
+		Silent:      true,
+		Metrics:     true,
+	})
+	if err != nil {
+		return err
+	}
+	err = mc2.DoBatch(
+		Do("GET", "1", "2").Str(`{"type":"Point","coordinates":[20,10]}`),
+	)
+	if err != nil {
+		return err
+	}
+	mc2.Close()
+
+	mc2, err = mockOpenServer(MockServerOptions{
+		AOFFileName: "aof",
+		AOFData:     aofLegacy[:len(aofLegacy)-1],
+		Silent:      true,
+		Metrics:     true,
+	})
+	if err != io.ErrUnexpectedEOF {
+		return fmt.Errorf("expected '%v', got '%v'", io.ErrUnexpectedEOF, err)
+	}
+	mc2.Close()
+
+	mc2, err = mockOpenServer(MockServerOptions{
+		AOFFileName: "aof",
+		AOFData:     aofLegacy[1:],
+		Silent:      true,
+		Metrics:     true,
+	})
+	if err != io.ErrUnexpectedEOF {
+		return fmt.Errorf("expected '%v', got '%v'", io.ErrUnexpectedEOF, err)
+	}
+	mc2.Close()
+
+	return nil
 }
