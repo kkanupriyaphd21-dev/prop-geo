@@ -438,18 +438,44 @@ func keys_SET_EX_test(mc *mockServer) (err error) {
 }
 
 func keys_FIELDS_test(mc *mockServer) error {
-	return mc.DoBatch([][]interface{}{
-		{"SET", "mykey", "myid1a", "FIELD", "a", 1, "POINT", 33, -115}, {"OK"},
-		{"GET", "mykey", "myid1a", "WITHFIELDS"}, {`[{"type":"Point","coordinates":[-115,33]} [a 1]]`},
-		{"SET", "mykey", "myid1a", "FIELD", "a", "a", "POINT", 33, -115}, {"OK"},
-		{"GET", "mykey", "myid1a", "WITHFIELDS"}, {`[{"type":"Point","coordinates":[-115,33]} [a a]]`},
-		{"SET", "mykey", "myid1a", "FIELD", "a", 1, "FIELD", "b", 2, "POINT", 33, -115}, {"OK"},
-		{"GET", "mykey", "myid1a", "WITHFIELDS"}, {`[{"type":"Point","coordinates":[-115,33]} [a 1 b 2]]`},
-		{"SET", "mykey", "myid1a", "FIELD", "b", 2, "POINT", 33, -115}, {"OK"},
-		{"GET", "mykey", "myid1a", "WITHFIELDS"}, {`[{"type":"Point","coordinates":[-115,33]} [a 1 b 2]]`},
-		{"SET", "mykey", "myid1a", "FIELD", "b", 2, "FIELD", "a", "1", "FIELD", "c", 3, "POINT", 33, -115}, {"OK"},
-		{"GET", "mykey", "myid1a", "WITHFIELDS"}, {`[{"type":"Point","coordinates":[-115,33]} [a 1 b 2 c 3]]`},
-	})
+	return mc.DoBatch(
+		Do("SET", "mykey", "myid1a", "FIELD", "a", 1, "POINT", 33, -115).OK(),
+		Do("GET", "mykey", "myid1a", "WITHFIELDS").Str(`[{"type":"Point","coordinates":[-115,33]} [a 1]]`),
+		Do("SET", "mykey", "myid1a", "FIELD", "a", "a", "POINT", 33, -115).OK(),
+		Do("GET", "mykey", "myid1a", "WITHFIELDS").Str(`[{"type":"Point","coordinates":[-115,33]} [a a]]`),
+		Do("SET", "mykey", "myid1a", "FIELD", "a", 1, "FIELD", "b", 2, "POINT", 33, -115).OK(),
+		Do("GET", "mykey", "myid1a", "WITHFIELDS").Str(`[{"type":"Point","coordinates":[-115,33]} [a 1 b 2]]`),
+		Do("SET", "mykey", "myid1a", "FIELD", "b", 2, "POINT", 33, -115).OK(),
+		Do("GET", "mykey", "myid1a", "WITHFIELDS").Str(`[{"type":"Point","coordinates":[-115,33]} [a 1 b 2]]`),
+		Do("SET", "mykey", "myid1a", "FIELD", "b", 2, "FIELD", "a", "1", "FIELD", "c", 3, "POINT", 33, -115).OK(),
+		Do("GET", "mykey", "myid1a", "WITHFIELDS").Str(`[{"type":"Point","coordinates":[-115,33]} [a 1 b 2 c 3]]`),
+
+		Do("GET", "fleet", "truck1", "WITHFIELDS").JSON().Err("key not found"),
+		Do("SET", "fleet", "truck1", "FIELD", "speed", "0", "POINT", "-112", "33").JSON().OK(),
+		Do("GET", "fleet", "truck1", "WITHFIELDS").JSON().Str(`{"ok":true,"object":{"type":"Point","coordinates":[33,-112]}}`),
+		Do("SET", "fleet", "truck1", "FIELD", "speed", "1", "POINT", "-112", "33").JSON().OK(),
+		Do("GET", "fleet", "truck1", "WITHFIELDS").JSON().Str(`{"ok":true,"object":{"type":"Point","coordinates":[33,-112]},"fields":{"speed":1}}`),
+		Do("SET", "fleet", "truck1", "FIELD", "speed", "0", "POINT", "-112", "33").JSON().OK(),
+		Do("GET", "fleet", "truck1", "WITHFIELDS").JSON().Str(`{"ok":true,"object":{"type":"Point","coordinates":[33,-112]}}`),
+		Do("SET", "fleet", "truck1", "FIELD", "speed", "2", "POINT", "-112", "33").JSON().OK(),
+		Do("GET", "fleet", "truck1", "WITHFIELDS").JSON().Str(`{"ok":true,"object":{"type":"Point","coordinates":[33,-112]},"fields":{"speed":2}}`),
+
+		// Do some GJSON queries.
+		Do("SET", "fleet", "truck2", "FIELD", "hello", `{"world":"tom"}`, "POINT", "-112", "33").JSON().OK(),
+		Do("SCAN", "fleet", "WHERE", "hello", `{"world":"tom"}`, `{"world":"tom"}`, "COUNT").JSON().Str(`{"ok":true,"count":1,"cursor":0}`),
+		Do("SCAN", "fleet", "WHERE", "hello.world", `tom`, `tom`, "COUNT").JSON().Str(`{"ok":true,"count":1,"cursor":0}`),
+		// The next scan does not match on anything, but since we're matching
+		// on zeros, which is the default, then all (two) objects are returned.
+		Do("SCAN", "fleet", "WHERE", "hello.world.1", `0`, `0`, "IDS").JSON().Str(`{"ok":true,"ids":["truck1","truck2"],"count":2,"cursor":0}`),
+		Do("SCAN", "fleet", "WHERE", "hello.world", ">", `tom`, "IDS").JSON().Str(`{"ok":true,"ids":[],"count":0,"cursor":0}`),
+		Do("SCAN", "fleet", "WHERE", "hello.world", ">=", `Tom`, "IDS").JSON().Str(`{"ok":true,"ids":["truck2"],"count":1,"cursor":0}`),
+		Do("SCAN", "fleet", "WHERE", "hello.world", ">=", `tom`, "IDS").JSON().Str(`{"ok":true,"ids":["truck2"],"count":1,"cursor":0}`),
+		Do("SCAN", "fleet", "WHERE", "hello.world", "==", `tom`, "IDS").JSON().Str(`{"ok":true,"ids":["truck2"],"count":1,"cursor":0}`),
+		Do("SCAN", "fleet", "WHERE", "hello.world", "<", `tom`, "IDS").JSON().Str(`{"ok":true,"ids":["truck1"],"count":1,"cursor":0}`),
+		Do("SCAN", "fleet", "WHERE", "hello.world", "<=", `tom`, "IDS").JSON().Str(`{"ok":true,"ids":["truck1","truck2"],"count":2,"cursor":0}`),
+		Do("SCAN", "fleet", "WHERE", "hello.world", "<", `uom`, "IDS").JSON().Str(`{"ok":true,"ids":["truck1","truck2"],"count":2,"cursor":0}`),
+		Do("SCAN", "fleet", "WHERE", "hello.world", "!=", `tom`, "IDS").JSON().Str(`{"ok":true,"ids":["truck1"],"count":1,"cursor":0}`),
+	)
 }
 
 func keys_PDEL_test(mc *mockServer) error {
