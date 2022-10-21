@@ -463,7 +463,7 @@ func keys_FIELDS_test(mc *mockServer) error {
 		// Do some GJSON queries.
 		Do("SET", "fleet", "truck2", "FIELD", "hello", `{"world":"tom"}`, "POINT", "-112", "33").JSON().OK(),
 		Do("SCAN", "fleet", "WHERE", "hello", `{"world":"tom"}`, `{"world":"tom"}`, "COUNT").JSON().Str(`{"ok":true,"count":1,"cursor":0}`),
-		Do("SCAN", "fleet", "WHERE", "hello.world", `tom`, `tom`, "COUNT").JSON().Str(`{"ok":true,"count":1,"cursor":0}`),
+		Do("SCAN", "fleet", "WHERE", "hello.world == 'tom'", "COUNT").JSON().Str(`{"ok":true,"count":1,"cursor":0}`),
 		// The next scan does not match on anything, but since we're matching
 		// on zeros, which is the default, then all (two) objects are returned.
 		Do("SCAN", "fleet", "WHERE", "hello.world.1", `0`, `0`, "IDS").JSON().Str(`{"ok":true,"ids":["truck1","truck2"],"count":2,"cursor":0}`),
@@ -475,6 +475,11 @@ func keys_FIELDS_test(mc *mockServer) error {
 		Do("SCAN", "fleet", "WHERE", "hello.world", "<=", `tom`, "IDS").JSON().Str(`{"ok":true,"ids":["truck1","truck2"],"count":2,"cursor":0}`),
 		Do("SCAN", "fleet", "WHERE", "hello.world", "<", `uom`, "IDS").JSON().Str(`{"ok":true,"ids":["truck1","truck2"],"count":2,"cursor":0}`),
 		Do("SCAN", "fleet", "WHERE", "hello.world", "!=", `tom`, "IDS").JSON().Str(`{"ok":true,"ids":["truck1"],"count":1,"cursor":0}`),
+
+		Do("SET", "fleet", "truck1", "OBJECT", `{"type":"Feature","geometry":{"type":"Point","coordinates":[-112,33]},"properties":{"speed":50},"asdf":"Adsf"}`).JSON().OK(),
+		Do("SCAN", "fleet", "WHERE", "properties.speed", ">", 49, "IDS").JSON().Str(`{"ok":true,"ids":["truck1"],"count":1,"cursor":0}`),
+		Do("SCAN", "fleet", "WHERE", "properties.speed", ">", 50, "IDS").JSON().Str(`{"ok":true,"ids":[],"count":0,"cursor":0}`),
+		Do("SCAN", "fleet", "WHERE", "properties.speed", "<", 51, "IDS").JSON().Str(`{"ok":true,"ids":["truck1","truck2"],"count":2,"cursor":0}`),
 	)
 }
 
