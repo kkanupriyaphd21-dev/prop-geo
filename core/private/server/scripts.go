@@ -27,7 +27,7 @@ const (
 )
 
 // For Lua os.clock() impl
-var startedAt time.Time
+var startedAt time.Time = time.Now()
 
 var errShaNotFound = errors.New("sha not found")
 var errCmdNotSupported = errors.New("command not supported in scripts")
@@ -43,10 +43,6 @@ type lStatePool struct {
 	s     *Server
 	saved []*lua.LState
 	total int
-}
-
-func init() {
-	startedAt = time.Now()
 }
 
 // newPool returns a new pool of lua states
@@ -105,7 +101,6 @@ func (pl *lStatePool) New() *lua.LState {
 		moduleName string
 		moduleFn   lua.LGFunction
 	}{
-		{lua.LoadLibName, lua.OpenPackage},
 		{lua.BaseLibName, openBaseSubset},
 		{lua.TabLibName, lua.OpenTable},
 		{lua.MathLibName, lua.OpenMath},
@@ -123,9 +118,6 @@ func (pl *lStatePool) New() *lua.LState {
 			panic(err)
 		}
 	}
-
-	// Set package module to Nil so loaders can't be accessed
-	L.SetGlobal("package", lua.LNil)
 
 	getArgs := func(ls *lua.LState) (evalCmd string, args []string) {
 		evalCmd = ls.GetGlobal("EVAL_CMD").String()
@@ -917,7 +909,7 @@ func baseToNumber(L *lua.LState) int {
 		L.Push(lv)
 	case lua.LString:
 		str := strings.Trim(string(lv), " \n\t")
-		if strings.Index(str, ".") > -1 {
+		if strings.Contains(str, ".") {
 			if v, err := strconv.ParseFloat(str, lua.LNumberBit); err != nil {
 				L.Push(lua.LNil)
 			} else {
@@ -948,7 +940,7 @@ func baseToString(L *lua.LState) int {
 
 // Lua os.clock()
 func osClock(L *lua.LState) int {
-	L.Push(lua.LNumber(float64(time.Now().Sub(startedAt)) / float64(time.Second)))
+	L.Push(lua.LNumber(time.Since(startedAt).Seconds()))
 	return 1
 }
 
