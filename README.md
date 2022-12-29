@@ -34,9 +34,9 @@ It supports a variety of object types including lat/lon points, bounding boxes, 
 - In-memory database that persists on disk.
 
 ## Components
-- `propgeo-server    ` - The server
-- `propgeo-cli       ` - Command line interface tool
-- `propgeo-benchmark ` - Server benchmark tool
+- propgeo-server: The server
+- propgeo-cli: Command line interface tool
+- propgeo-benchmark: Server benchmark tool
 
 ## Getting Started
 
