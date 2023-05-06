@@ -1,9 +1,14 @@
 FROM alpine:3.16.2
+
+ARG VERSION
+ARG TARGETOS
+ARG TARGETARCH
+
 RUN apk add --no-cache ca-certificates
 
-ADD propgeo-server /usr/local/bin
-ADD propgeo-cli /usr/local/bin
-ADD propgeo-benchmark /usr/local/bin
+ADD packages/propgeo-$VERSION-$TARGETOS-$TARGETARCH/propgeo-server /usr/local/bin
+ADD packages/propgeo-$VERSION-$TARGETOS-$TARGETARCH/propgeo-cli /usr/local/bin
+ADD packages/propgeo-$VERSION-$TARGETOS-$TARGETARCH/propgeo-benchmark /usr/local/bin
 
 RUN addgroup -S propgeo && \
     adduser -S -G propgeo propgeo && \
