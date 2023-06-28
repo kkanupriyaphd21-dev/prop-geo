@@ -70,6 +70,7 @@ PropGeo can be compiled and used on Linux, OSX, Windows, FreeBSD, and probably o
 
 To build everything simply:
 ```
+$ git tag <major>.<minor>.<fix>
 $ make
 ```
 
