@@ -946,7 +946,7 @@ func (s *Server) handleInputCommand(client *Client, msg *Message) error {
 
 	if !s.loadedAndReady.Load() {
 		switch msg.Command() {
-		case "output", "ping", "echo":
+		case "output", "ping", "echo", "auth":
 		default:
 			return writeErr("LOADING PropGeo is loading the dataset in memory")
 		}
@@ -965,7 +965,7 @@ func (s *Server) handleInputCommand(client *Client, msg *Message) error {
 
 	var write bool
 
-	if (!client.authd || cmd == "auth") && cmd != "output" {
+	if (!client.authd || cmd == "auth") && cmd != "output" && cmd != "healthz" {
 		if s.config.requirePass() != "" {
 			password := ""
 			// This better be an AUTH command or the Message should contain an Auth
