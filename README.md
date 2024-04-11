@@ -1,13 +1,14 @@
 <p align="center">
-  <a href="https://propgeo.com"><img 
-    src="/.github/images/logo-light.svg" 
-    width="284" border="0" alt="PropGeo"></a>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="/.github/images/logo-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="/.github/images/logo-light.svg">
+  <img alt="PropGeo" src="/.github/images/logo-light.svg" width="284">
+</picture>
 </p>
 <p align="center">
 <a href="https://propgeo.com/slack/"><img src="https://img.shields.io/badge/slack-channel-orange.svg" alt="Slack Channel"></a>
 <a href="https://hub.docker.com/r/propgeo/propgeo"><img src="https://img.shields.io/docker/pulls/propgeo/propgeo.svg" alt="Docker Pulls"></a>
 </p>
-
 
 PropGeo is an open source (MIT licensed), in-memory geolocation data store, spatial index, and realtime geofencing server.
 It supports a variety of object types including lat/lon points, bounding boxes, XYZ tiles, Geohashes, and GeoJSON. 
