@@ -1,4 +1,4 @@
-## PropGeo Integation Testing
+## PropGeo Integration Testing
 
 - Uses Redis protocol
 - The PropGeo data is flushed before every `DoBatch`
