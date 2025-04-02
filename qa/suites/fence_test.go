@@ -176,6 +176,8 @@ func fence_channel_message_order_test(mc *mockServer) error {
 	finalErr := make(chan error)
 
 	// Concurrently subscribe for notifications
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
 		// Create the subscription connection to PropGeo to subscribe for updates
 		sc, err := redis.Dial("tcp", fmt.Sprintf(":%d", mc.port))
@@ -184,16 +186,15 @@ func fence_channel_message_order_test(mc *mockServer) error {
 			return
 		}
 		defer sc.Close()
-
+		// time.Sleep(time.Second)
 		// Subscribe the subscription client to the * pattern
 		psc := redis.PubSubConn{Conn: sc}
 		if err := psc.PSubscribe("*"); err != nil {
 			log.Println(err)
 			return
 		}
-
+		wg.Done()
 		var msgs []string
-
 		// While not a permanent error on the connection.
 	loop:
 		for sc.Err() == nil {
@@ -207,7 +208,6 @@ func fence_channel_message_order_test(mc *mockServer) error {
 				fmt.Printf("%s\n", err.Error())
 			}
 		}
-
 		// Verify all messages
 		correctOrder := []string{"exit:A", "exit:B", "outside:A", "outside:B", "enter:C", "enter:D", "inside:C", "inside:D"}
 		for i := range msgs {
@@ -218,7 +218,8 @@ func fence_channel_message_order_test(mc *mockServer) error {
 		}
 		finalErr <- nil
 	}()
-
+	wg.Wait()
+	time.Sleep(time.Second)
 	// Create the base connection for setting up points and geofences
 	bc, err := redis.Dial("tcp", fmt.Sprintf(":%d", mc.port))
 	if err != nil {
