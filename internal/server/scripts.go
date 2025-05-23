@@ -743,7 +743,7 @@ func (s *Server) luaPropGeoAtomicRW(msg *Message) (resp.Value, error) {
 	case "get", "keys", "scan", "nearby", "within", "intersects", "hooks", "search",
 		"ttl", "bounds", "server", "info", "type", "jget", "fget", "exists", "fexists", "test":
 		// read operations
-		if s.config.followHost() != "" && !s.fcuponce {
+		if s.config.followHost() != "" && !s.caughtUpOnce() {
 			return resp.NullValue(), errCatchingUp
 		}
 	}
@@ -796,7 +796,7 @@ func (s *Server) luaPropGeoAtomicRO(msg *Message) (resp.Value, error) {
 	case "get", "keys", "scan", "nearby", "within", "intersects", "hooks", "search",
 		"ttl", "bounds", "server", "info", "type", "jget", "fget", "exists", "fexists", "test":
 		// read operations
-		if s.config.followHost() != "" && !s.fcuponce {
+		if s.config.followHost() != "" && !s.caughtUpOnce() {
 			return resp.NullValue(), errCatchingUp
 		}
 	}
@@ -849,7 +849,7 @@ func (s *Server) luaPropGeoNonAtomic(msg *Message) (resp.Value, error) {
 		// read operations
 		s.mu.RLock()
 		defer s.mu.RUnlock()
-		if s.config.followHost() != "" && !s.fcuponce {
+		if s.config.followHost() != "" && !s.caughtUpOnce() {
 			return resp.NullValue(), errCatchingUp
 		}
 	}
