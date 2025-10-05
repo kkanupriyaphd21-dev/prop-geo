@@ -244,6 +244,7 @@ type Options struct {
 	UseHTTP        bool
 	MetricsAddr    string
 	UnixSocketPath string // path for unix socket
+	ClientOutput   string // "" or "resp" or "json"
 
 	// DevMode puts application in to dev mode
 	DevMode bool
@@ -573,13 +574,23 @@ func (s *Server) netServe() error {
 		log.Debug("Closing client connections...")
 		s.connsmu.RLock()
 		for _, c := range s.conns {
-			c.closer.Close()
+			if c.closer != nil {
+				c.closer.Close()
+			}
 		}
 		s.connsmu.RUnlock()
 		wg.Wait()
 		ln.Close()
 		log.Debug("Client connection closed")
 	}()
+
+	var defaultOutputType Type
+	switch s.opts.ClientOutput {
+	case "resp":
+		defaultOutputType = RESP
+	case "json":
+		defaultOutputType = JSON
+	}
 
 	log.Infof("Ready to accept connections at %s", ln.Addr())
 	var clientID int64
@@ -595,7 +606,12 @@ func (s *Server) netServe() error {
 		}
 		wg.Add(1)
 		go func(conn net.Conn) {
-			defer wg.Done()
+			detached := false
+			defer func() {
+				if !detached {
+					wg.Done()
+				}
+			}()
 
 			// open connection
 			// create the client
@@ -673,6 +689,8 @@ func (s *Server) netServe() error {
 					if msg != nil && msg.Command() != "" {
 						if client.outputType != Null {
 							msg.OutputType = client.outputType
+						} else if defaultOutputType != Null {
+							msg.OutputType = defaultOutputType
 						}
 						if msg.Command() == "quit" {
 							if msg.OutputType == RESP {
@@ -706,12 +724,15 @@ func (s *Server) netServe() error {
 								client.in = InputStream{}
 								client.pr.rd = rwc
 								client.pr.wr = rwc
+								client.closer = nil
+								wg.Done()
+								detached = true
 								log.Debugf("Detached connection: %s", client.remoteAddr)
 
-								var wg sync.WaitGroup
-								wg.Add(1)
+								var wg2 sync.WaitGroup
+								wg2.Add(1)
 								go func() {
-									defer wg.Done()
+									defer wg2.Done()
 									err := s.goLive(
 										client.goLiveErr,
 										&liveConn{conn.RemoteAddr(), rwc},
@@ -723,7 +744,7 @@ func (s *Server) netServe() error {
 										log.Error(err)
 									}
 								}()
-								wg.Wait()
+								wg2.Wait()
 								return // close connection
 							}
 							log.Error(err)
