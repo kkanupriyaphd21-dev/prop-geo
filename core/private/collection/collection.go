@@ -1,6 +1,7 @@
 package collection
 
 import (
+	"math"
 	"runtime"
 
 	"github.com/tidwall/btree"
@@ -407,6 +408,14 @@ func (c *Collection) geoSearch(
 ) bool {
 	alive := true
 	min, max := rtreeRect(rect)
+
+	// avoid search if NaN present as it results in full search
+	// https://github.com/tidwall/propgeo/issues/793
+	if math.IsNaN(float64(min[0])) && math.IsNaN(float64(min[1])) &&
+		math.IsNaN(float64(max[0])) && math.IsNaN(float64(max[1])) {
+		return alive
+	}
+
 	c.spatial.Search(
 		min, max,
 		func(_, _ [2]float32, o *object.Object) bool {
